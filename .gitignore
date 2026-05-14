@@ -8,8 +8,6 @@ venv/
 
 # Ignore IDE configuration files
 .vscode/
-.idea/
-JetBrains-*.iml
 
 # Ignore OS-specific files and directories
 .DS_Store
@@ -29,6 +27,6 @@ Thumbs.db
 # Ignore config files and secrets
 .env
 
-.cache
-.logs
-.outputs
+.cache/*
+.logs/*
+.outputs/*
