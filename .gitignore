@@ -1,0 +1,32 @@
+# Ignore all .pyc and __pycache__ directories
+*.pyc
+__pycache__/
+
+# Ignore virtual environment directories
+venv/
+.venv/
+
+# Ignore IDE configuration files
+.vscode/
+.idea/
+JetBrains-*.iml
+
+# Ignore OS-specific files and directories
+.DS_Store
+Thumbs.db
+*.sln
+*.userprefs
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Ignore Jupyter notebooks and their outputs
+.ipynb_checkpoints/
+*~
+
+# Ignore config files and secrets
+.env
+
+.cache

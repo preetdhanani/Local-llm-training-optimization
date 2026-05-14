@@ -1,0 +1,70 @@
+"""SFT training orchestration."""
+from datasets import Dataset
+from peft import LoraConfig
+from torch import nn
+from transformers import AutoTokenizer
+from trl import SFTConfig, SFTTrainer
+
+from src.config import TrainConfig
+from src.models import build_lora_config
+
+
+def train_sft(
+    cfg: TrainConfig,
+    model: nn.Module,
+    tokenizer: AutoTokenizer,
+    train_dataset: Dataset,
+    eval_dataset: Dataset,
+) -> None:
+    """
+    Execute SFT training.
+
+    Args:
+        cfg: TrainConfig instance
+        model: Loaded model (quantized or not)
+        tokenizer: Tokenizer
+        train_dataset: Training dataset with "text" field
+        eval_dataset: Evaluation dataset with "text" field
+    """
+    # Build training config
+    sft_config = SFTConfig(
+        output_dir=cfg.sft_output_dir,
+        per_device_train_batch_size=cfg.batch_size,
+        gradient_accumulation_steps=cfg.grad_accum,
+        num_train_epochs=cfg.epochs,
+        learning_rate=cfg.learning_rate,
+        warmup_ratio=cfg.sft_warmup_ratio,
+        max_seq_length=cfg.max_seq_length,
+        packing=False,
+        dataset_text_field="text",
+        bf16=True,
+        gradient_checkpointing=True,
+        logging_steps=10,
+        save_steps=cfg.sft_save_steps,
+        evaluation_strategy="steps",
+        eval_steps=cfg.sft_eval_steps,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        report_to="wandb" if cfg.wandb_project else "none",
+        run_name=f"sft-{cfg.model_id}",
+    )
+
+    # Build LoRA config
+    lora_config = build_lora_config(
+        r=cfg.lora_r,
+        alpha=cfg.lora_alpha,
+        dropout=cfg.lora_dropout,
+    )
+
+    # Train
+    trainer = SFTTrainer(
+        model=model,
+        tokenizer=tokenizer,
+        args=sft_config,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        peft_config=lora_config,
+    )
+
+    trainer.train()
+    trainer.save_model(cfg.sft_output_dir)
