@@ -1,6 +1,7 @@
 # Ignore all .pyc and __pycache__ directories
 *.pyc
 __pycache__/
+.pytest_cache/*
 
 # Ignore virtual environment directories
 venv/

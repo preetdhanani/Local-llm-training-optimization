@@ -1,6 +1,7 @@
 """Full RLHF pipeline: SFT → DPO (end-to-end)."""
 import os
 from datetime import datetime
+from typing import Optional, Tuple
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from datasets import load_dataset
@@ -20,18 +21,24 @@ from src.utils.wandb_utils import (
 )
 
 
-def run_full_pipeline():
+def run_full_pipeline(cfg: Optional[TrainConfig] = None):
     """
-    Execute full RLHF pipeline end-to-end:
-    1. SFT (Supervised Fine-Tuning) on instruction data
-    2. DPO (Direct Preference Optimization) on preference pairs
+    Execute full RLHF pipeline end-to-end.
     """
-    # Initialize config
-    cfg = TrainConfig()
+    # Initialize config if not provided
+    if cfg is None:
+        cfg = TrainConfig()
+
+    # Determine base output directories
+    base_outputs = getattr(cfg, "sft_output_dir", "./outputs")
+    if "_" in base_outputs: # If it already has a timestamp, keep it
+        base_sft_path = base_outputs
+    else:
+        base_sft_path = "./outputs/sft_output"
 
     # Generate single timestamp for entire pipeline run
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    cfg.sft_output_dir = f"./outputs/sft_output_{timestamp}"
+    cfg.sft_output_dir = f"{base_sft_path}_{timestamp}"
     cfg.dpo_output_dir = f"./outputs/dpo_output_{timestamp}"
     run_group = cfg.wandb_group or format_group_name(cfg.model_id, timestamp)
 
@@ -65,15 +72,33 @@ def run_full_pipeline():
         logger.info(f"[OK] Tokenizer loaded")
         logger.info("")
         
-        # Load raw dataset once
+        # Load raw dataset using robust loader logic
         logger.info("Loading raw dataset...")
-        raw_dataset = load_dataset(
-            cfg.dataset_name,
-            split="train",
-            num_proc=1,
-            keep_in_memory=False,
-            download_mode="force_redownload",
-        )
+        if cfg.dataset_type == "local" and cfg.dataset_path:
+            if not os.path.exists(cfg.dataset_path):
+                raise FileNotFoundError(f"Local dataset not found at: {cfg.dataset_path}")
+            ext = os.path.splitext(cfg.dataset_path)[1].lower()
+            if ext == ".csv":
+                raw_dataset = load_dataset("csv", data_files=cfg.dataset_path, split="train")
+            elif ext in [".json", ".jsonl"]:
+                raw_dataset = load_dataset("json", data_files=cfg.dataset_path, split="train")
+            else:
+                raise ValueError(f"Unsupported local file extension: {ext}")
+            
+            # Check for required columns if using custom mapping
+            if cfg.dataset_format == "custom_columns":
+                missing = [col for col in [cfg.prompt_column, cfg.chosen_column] if col not in raw_dataset.column_names]
+                if missing:
+                    raise ValueError(f"Required columns {missing} not found in dataset. Available: {raw_dataset.column_names}")
+        else:
+            raw_dataset = load_dataset(
+                cfg.dataset_name,
+                split="train",
+                num_proc=1,
+                keep_in_memory=False,
+                download_mode="force_redownload",
+            )
+        
         logger.info(f"[OK] Raw dataset loaded: {len(raw_dataset)} total examples")
         logger.info("")
         
