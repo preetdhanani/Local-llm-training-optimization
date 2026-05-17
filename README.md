@@ -60,7 +60,23 @@ Configuration
   - `model_id`: HF model id (default: Qwen/Qwen2.5-0.5B-Instruct)
   - `batch_size`, `grad_accum`, `learning_rate`, `epochs`
   - `use_4bit`: set `False` for CPU runs or if bitsandbytes is unavailable
-  - `wandb_*` options for experiment tracking
+
+Using Custom Datasets
+The framework is dynamic and supports loading your own data from local files (CSV, JSON, or JSONL).
+
+1. **Prepare your data**: Ensure your file has columns for the prompt, the preferred response, and (for DPO) the rejected response.
+2. **Update Settings**: In `src/config/settings.py`, configure the following:
+   ```python
+   dataset_type = "local"
+   dataset_path = "./path/to/your/data.csv"
+   dataset_format = "custom_columns" # or "standard_messages" for OpenAI format
+   
+   # Map your specific column names
+   prompt_column = "your_question_column"
+   chosen_column = "your_good_answer_column"
+   rejected_column = "your_bad_answer_column"
+   ```
+3. **Chat Templates**: The project automatically uses the model's native chat template (via Hugging Face `apply_chat_template`), so you don't need to manually add special tokens to your data.
 
 Running the pipeline
 - Full run (recommended to validate end-to-end):

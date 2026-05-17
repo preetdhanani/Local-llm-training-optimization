@@ -53,28 +53,28 @@ def parse_dialogue(text: str) -> list[dict]:
     return messages
 
 
-def format_for_sft(example: dict, tokenizer) -> dict:
+def format_for_sft(example: dict, tokenizer, cfg) -> dict:
     """
     Format raw dataset example for SFT training.
-
-    Converts chosen text into chat template format.
-
-    Args:
-        example: Dataset row with "chosen" field
-        tokenizer: Tokenizer with apply_chat_template method
-
-    Returns:
-        Dict with "text" field containing formatted conversation
+    Supports standard messages or custom columns.
     """
     try:
-        text = example.get("chosen", "")
-        
-        # Handle missing or non-string data
-        if not text or not isinstance(text, str):
-            return {"text": ""}
-        
-        # Use raw text directly - avoid apply_chat_template to prevent hangs
-        return {"text": text.strip()}
+        messages = []
+        if cfg.dataset_format == "standard_messages":
+            messages = example.get("messages", [])
+        else:
+            # custom_columns: build message list from mapped columns
+            prompt = example.get(cfg.prompt_column, "")
+            response = example.get(cfg.chosen_column, "")
+            
+            if cfg.system_prompt:
+                messages.append({"role": "system", "content": cfg.system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            messages.append({"role": "assistant", "content": response})
+
+        # Apply chat template
+        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+        return {"text": text}
         
     except Exception as e:
         import sys
@@ -82,34 +82,26 @@ def format_for_sft(example: dict, tokenizer) -> dict:
         return {"text": ""}
 
 
-def format_preference_pair(example: dict) -> dict:
+def format_preference_pair(example: dict, cfg) -> dict:
     """
     Format raw dataset example for DPO training.
-
-    Parses chosen/rejected pairs and validates them.
-
-    Args:
-        example: Dataset row with "chosen" and "rejected" fields
-
-    Returns:
-        Dict with "prompt", "chosen", "rejected", "valid" fields
+    Supports standard messages or custom columns.
     """
-    chosen_prompt, chosen_response = safe_split(example.get("chosen"))
-    rejected_prompt, rejected_response = safe_split(example.get("rejected"))
+    if cfg.dataset_format == "standard_messages":
+        prompt = example.get("prompt", "")
+        chosen = example.get("chosen", "")
+        rejected = example.get("rejected", "")
+    else:
+        # custom_columns mapping
+        prompt = example.get(cfg.prompt_column, "")
+        chosen = example.get(cfg.chosen_column, "")
+        rejected = example.get(cfg.rejected_column, "")
 
-    valid = True
-
-    # Both must have same prompt
-    if chosen_prompt is None or rejected_prompt is None or chosen_prompt != rejected_prompt:
-        valid = False
-
-    # Both must have responses
-    if chosen_response is None or rejected_response is None:
-        valid = False
-
+    valid = bool(prompt and chosen and rejected)
+    
     return {
-        "prompt": chosen_prompt if valid else "",
-        "chosen": chosen_response if valid else "",
-        "rejected": rejected_response if valid else "",
+        "prompt": prompt,
+        "chosen": chosen,
+        "rejected": rejected,
         "valid": valid,
     }

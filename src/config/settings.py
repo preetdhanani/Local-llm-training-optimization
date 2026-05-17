@@ -6,6 +6,17 @@ from typing import Optional
 @dataclass
 class TrainConfig:
     """Unified training configuration."""
+    # Dataset settings
+    dataset_type: str = "huggingface"  # "huggingface" | "local"
+    dataset_path: Optional[str] = None  # Path to local CSV/JSONL if type is "local"
+    dataset_format: str = "custom_columns"  # "standard_messages" | "custom_columns"
+    
+    # Column mapping (used if dataset_format == "custom_columns")
+    prompt_column: str = "prompt"
+    chosen_column: str = "chosen"
+    rejected_column: str = "rejected"
+    system_prompt: Optional[str] = "You are a helpful assistant."
+
     # Dataset len
     dataset_len: int = 1000
 

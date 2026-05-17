@@ -30,7 +30,7 @@ def preprocess_sft_dataset(
     if logger:
         logger.info(f"[SFT] Formatting SFT data ({len(ds)} examples)...")
     
-    ds = ds.map(lambda x: format_for_sft(x, tokenizer), desc="Formatting SFT data")
+    ds = ds.map(lambda x: format_for_sft(x, tokenizer, cfg), desc="Formatting SFT data")
     
     if logger:
         logger.info(f"[SFT] Filtering SFT data (min length > 50)...")
@@ -50,14 +50,24 @@ def preprocess_sft_dataset(
 
 
 def load_sft_dataset(cfg, tokenizer):
-    """Load and prepare SFT dataset (for backward compatibility)."""
-    ds = load_dataset(
-        cfg.dataset_name,
-        split="train",
-        num_proc=1,
-        keep_in_memory=False,
-        download_mode="force_redownload",
-    )
+    """Load and prepare SFT dataset."""
+    if cfg.dataset_type == "local" and cfg.dataset_path:
+        # Determine format from extension
+        ext = os.path.splitext(cfg.dataset_path)[1].lower()
+        if ext == ".csv":
+            ds = load_dataset("csv", data_files=cfg.dataset_path, split="train")
+        elif ext in [".json", ".jsonl"]:
+            ds = load_dataset("json", data_files=cfg.dataset_path, split="train")
+        else:
+            raise ValueError(f"Unsupported local file extension: {ext}")
+    else:
+        ds = load_dataset(
+            cfg.dataset_name,
+            split="train",
+            num_proc=1,
+            keep_in_memory=False,
+            download_mode="force_redownload",
+        )
     return preprocess_sft_dataset(cfg, tokenizer, ds)
 
 
@@ -70,24 +80,6 @@ def preprocess_dpo_dataset(
 ) -> Tuple[Dataset, Dataset]:
     """
     Preprocess raw dataset for DPO training with logging.
-
-    Steps:
-      1. Select subset
-      2. Clean preference dataset
-      3. Format preference pairs
-      4. Remove None/empty values
-      5. Remove duplicates
-      6. Filter by token length and character length
-      7. Split into train/eval
-
-    Args:
-        cfg: TrainConfig instance
-        tokenizer: Tokenizer for token counting
-        raw_dataset: Raw dataset from HuggingFace
-        logger: Optional logger for logging preprocessing steps
-
-    Returns:
-        Tuple of (train_dataset, eval_dataset)
     """
     from src.data.dataset_cleaner import clean_preference_dataset
     
@@ -96,16 +88,25 @@ def preprocess_dpo_dataset(
     
     ds = raw_dataset.select(range(min(cfg.dataset_len, len(raw_dataset))))
     
+    # In dynamic mode, cleaning might need adjustment but we'll try to keep it robust
     if logger:
         logger.info(f"[DPO] Cleaning preference dataset ({len(ds)} examples)...")
     
-    ds = clean_preference_dataset(ds, tokenizer, verbose=False)
+    # For custom datasets, we skip the complex hh-rlhf cleaner and do simple dedup/length filters
+    if cfg.dataset_type == "local" or cfg.dataset_format == "custom_columns":
+         if logger: logger.info("[DPO] Using simple cleaning for custom dataset")
+         # Simple dedup based on prompt/chosen
+         ds = ds.map(lambda x: {"fp": f"{x.get(cfg.prompt_column)}|||{x.get(cfg.chosen_column)}"})
+         ds = ds.filter(lambda x, idx: x["fp"] not in ds.select(range(idx))["fp"] if idx > 0 else True, with_indices=True)
+         ds = ds.remove_columns(["fp"])
+    else:
+        ds = clean_preference_dataset(ds, tokenizer, verbose=False)
     
     if logger:
         logger.info(f"[DPO] Formatting preference pairs...")
     
     ds = ds.map(
-        format_preference_pair,
+        lambda x: format_preference_pair(x, cfg),
         remove_columns=ds.column_names,
         desc="Formatting DPO data"
     )
@@ -113,21 +114,15 @@ def preprocess_dpo_dataset(
     before_none = len(ds)
     ds = ds.filter(
         lambda x: (
-            x.get("prompt") is not None and len(x.get("prompt", "")) > 0 and
-            x.get("chosen") is not None and len(x.get("chosen", "")) > 0 and
-            x.get("rejected") is not None and len(x.get("rejected", "")) > 0
+            x.get("prompt") is not None and len(str(x.get("prompt", ""))) > 0 and
+            x.get("chosen") is not None and len(str(x.get("chosen", ""))) > 0 and
+            x.get("rejected") is not None and len(str(x.get("rejected", ""))) > 0
         ),
         desc="Removing None/empty fields"
     )
     
     if logger:
         logger.info(f"[DPO] After None/empty filter: removed {before_none - len(ds)}, kept {len(ds)}")
-        logger.info(f"[DPO] Removing duplicates...")
-    
-    ds = remove_duplicates(ds)
-    
-    if logger:
-        logger.info(f"[DPO] After dedup: {len(ds)} examples")
         logger.info(f"[DPO] Filtering by length constraints...")
     
     limits = {
@@ -174,20 +169,22 @@ def load_dpo_dataset(
     tokenizer: AutoTokenizer,
 ) -> Tuple[Dataset, Dataset]:
     """
-    Load and prepare dataset for DPO training (for backward compatibility).
-
-    Args:
-        cfg: TrainConfig instance
-        tokenizer: Tokenizer for token counting
-
-    Returns:
-        Tuple of (train_dataset, eval_dataset)
+    Load and prepare dataset for DPO training.
     """
-    dataset_config = getattr(cfg, 'dataset_config', None)
-    if dataset_config:
-        ds = load_dataset(cfg.dataset_name, dataset_config, split="train")
+    if cfg.dataset_type == "local" and cfg.dataset_path:
+        ext = os.path.splitext(cfg.dataset_path)[1].lower()
+        if ext == ".csv":
+            ds = load_dataset("csv", data_files=cfg.dataset_path, split="train")
+        elif ext in [".json", ".jsonl"]:
+            ds = load_dataset("json", data_files=cfg.dataset_path, split="train")
+        else:
+            raise ValueError(f"Unsupported local file extension: {ext}")
     else:
-        ds = load_dataset(cfg.dataset_name, split="train", keep_in_memory=False)
+        dataset_config = getattr(cfg, 'dataset_config', None)
+        if dataset_config:
+            ds = load_dataset(cfg.dataset_name, dataset_config, split="train")
+        else:
+            ds = load_dataset(cfg.dataset_name, split="train", keep_in_memory=False)
 
     return preprocess_dpo_dataset(cfg, tokenizer, ds)
 
