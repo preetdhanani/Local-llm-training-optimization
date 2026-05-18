@@ -40,6 +40,10 @@ def run_full_pipeline(cfg: Optional[TrainConfig] = None):
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     cfg.sft_output_dir = f"{base_sft_path}_{timestamp}"
     cfg.dpo_output_dir = f"./outputs/dpo_output_{timestamp}"
+
+    # Ensure base outputs directory exists
+    os.makedirs("./outputs", exist_ok=True)
+    
     run_group = cfg.wandb_group or format_group_name(cfg.model_id, timestamp)
 
     # ========================================
