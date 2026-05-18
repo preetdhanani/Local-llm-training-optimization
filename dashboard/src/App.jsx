@@ -10,19 +10,21 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [logs, setLogs] = useState("");
+  const [isPaused, setIsPaused] = useState(false);
+  const [pausedStats, setPausedStats] = useState("");
   const [isAdvanced, setIsAdvanced] = useState(false);
   
   // Training Form State
   const [config, setConfig] = useState({
-    model_id: "hf-internal-testing/tiny-random-LlamaForCausalLM",
-    dataset_path: "test_custom_data.csv",
+    model_id: "Qwen/Qwen2.5-0.5B-Instruct",
+    dataset_path: "test_datasets/standard_test_data.csv",
     dataset_len: 1000,
     batch_size: 1,
     grad_accum: 2,
     epochs: 1,
     learning_rate: 0.000005,
     beta: 0.3,
-    use_4bit: false,
+    use_4bit: true,
     lora_r: 8,
     lora_alpha: 16,
     lora_dropout: 0.05,
@@ -35,6 +37,15 @@ function App() {
     wandb_mode: "disabled",
     wandb_project: "rlhf-handson-pytorch"
   });
+
+  const loadTestDefaults = () => {
+    setConfig(prev => ({
+      ...prev,
+      model_id: "hf-internal-testing/tiny-random-LlamaForCausalLM",
+      dataset_path: "test_datasets/standard_test_data.csv",
+      dataset_len: 40
+    }));
+  };
 
   // Poll for data
   useEffect(() => {
@@ -64,6 +75,8 @@ function App() {
       try {
         const res = await axios.get(`${API_BASE}/jobs/${selectedJob.id}/logs`);
         setLogs(res.data.logs);
+        setIsPaused(res.data.paused);
+        setPausedStats(res.data.paused_stats);
       } catch (err) {
         setLogs("Waiting for logs to initialize...");
       }
@@ -81,9 +94,28 @@ function App() {
       setSelectedJob(res.data);
       setLogs("Initializing training process...");
     } catch (err) {
-      alert("Failed to start training: " + err.response?.data?.detail || err.message);
+      alert("Failed to start training: " + (err.response?.data?.detail || err.message));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const approveJob = async () => {
+    try {
+      await axios.post(`${API_BASE}/jobs/${selectedJob.id}/approve`);
+      setIsPaused(false);
+    } catch (err) {
+      alert("Failed to approve job");
+    }
+  };
+
+  const abortJob = async () => {
+    try {
+      await axios.post(`${API_BASE}/jobs/${selectedJob.id}/abort`);
+      setIsPaused(false);
+      setSelectedJob(null);
+    } catch (err) {
+      alert("Failed to abort job");
     }
   };
 
@@ -124,9 +156,17 @@ function App() {
           </section>
 
           <section className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-              <Settings size={20} color="#94a3b8" />
-              <h2 style={{ margin: 0 }}>Training Configuration</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Settings size={20} color="#94a3b8" />
+                <h2 style={{ margin: 0 }}>Training Configuration</h2>
+              </div>
+              <button 
+                onClick={loadTestDefaults}
+                style={{ background: 'transparent', color: '#60a5fa', border: '1px solid #60a5fa', padding: '0.2rem 0.6rem', fontSize: '0.75rem', borderRadius: '4px' }}
+              >
+                Load Test Defaults
+              </button>
             </div>
             
             <div className="form-group" style={{display: 'flex', flexDirection: 'column', gap: '0.75rem'}}>
@@ -243,16 +283,37 @@ function App() {
         {/* Right Column: Logs & Jobs */}
         <div>
           {selectedJob && (
-            <section className="card" style={{ height: '400px', display: 'flex', flexDirection: 'column' }}>
+            <section className="card" style={{ display: 'flex', flexDirection: 'column' }}>
                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <FileText size={20} color="#60a5fa" />
                     <h2 style={{ margin: 0 }}>Live Logs: Job #{selectedJob.id}</h2>
                   </div>
-                  <button onClick={() => setSelectedJob(null)} style={{background: 'transparent', color: '#94a3b8', padding: 0}}>Close</button>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                    {isPaused && (
+                      <div style={{background: '#7f1d1d', color: '#fca5a5', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600}}>
+                        PAUSED: QUALITY GATE
+                      </div>
+                    )}
+                    <button onClick={() => setSelectedJob(null)} style={{background: 'transparent', color: '#94a3b8', padding: 0}}>Close</button>
+                  </div>
                </div>
+
+               {isPaused && (
+                <div style={{background: '#1e1b4b', border: '1px solid #4338ca', padding: '1rem', borderRadius: '4px', marginBottom: '1rem'}}>
+                  <div style={{fontWeight: 600, color: '#c7d2fe', marginBottom: '0.25rem'}}>⚠️ High Data Loss Detected</div>
+                  <div style={{fontSize: '0.875rem', color: '#94a3b8', marginBottom: '1rem'}}>
+                    Keep ratio is too low (<strong>{pausedStats}</strong>). Continue training?
+                  </div>
+                  <div style={{display: 'flex', gap: '0.5rem'}}>
+                    <button onClick={approveJob} style={{background: '#059669', fontSize: '0.875rem', padding: '0.4rem 1rem'}}>Proceed</button>
+                    <button onClick={abortJob} style={{background: '#b91c1c', fontSize: '0.875rem', padding: '0.4rem 1rem'}}>Abort</button>
+                  </div>
+                </div>
+               )}
+
                <pre style={{ 
-                 flex: 1, 
+                 height: '300px',
                  background: '#0f172a', 
                  padding: '1rem', 
                  borderRadius: '4px', 
@@ -267,9 +328,26 @@ function App() {
           )}
 
           <section className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-              <Activity size={20} color="#fbbf24" />
-              <h2 style={{ margin: 0 }}>Recent Jobs</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Activity size={20} color="#fbbf24" />
+                <h2 style={{ margin: 0 }}>Recent Jobs</h2>
+              </div>
+              {jobs.length > 0 && (
+                <button 
+                  onClick={async () => {
+                    if(confirm("Are you sure you want to delete ALL jobs? This will permanently wipe all logs and training outputs for every run in history.")) {
+                      try {
+                        await axios.delete(`${API_BASE}/jobs`);
+                        setSelectedJob(null);
+                      } catch (err) { alert("Failed to clear history"); }
+                    }
+                  }}
+                  style={{padding: '0.2rem 0.5rem', fontSize: '0.75rem', background: '#7f1d1d'}}
+                >
+                  Clear All History
+                </button>
+              )}
             </div>
             <table>
               <thead>
@@ -277,10 +355,11 @@ function App() {
                   <th>ID</th>
                   <th>Status</th>
                   <th>Actions</th>
+                  <th>Management</th>
                 </tr>
               </thead>
               <tbody>
-                {[...jobs].reverse().slice(0, 5).map(job => (
+                {[...jobs].reverse().slice(0, 10).map(job => (
                   <tr key={job.id}>
                     <td>#{job.id}</td>
                     <td>
@@ -290,6 +369,39 @@ function App() {
                     </td>
                     <td>
                       <button onClick={() => setSelectedJob(job)} style={{padding: '0.2rem 0.5rem', fontSize: '0.75rem'}}>View Logs</button>
+                    </td>
+                    <td>
+                      {(job.status === 'RUNNING' || job.status === 'AWAITING_APPROVAL') && (
+                        <button 
+                          onClick={async () => {
+                            const msg = job.status === 'RUNNING' 
+                              ? "Are you sure you want to stop this training job? This will kill the process immediately."
+                              : "Are you sure you want to abort this job?";
+                            if(confirm(msg)) {
+                                try {
+                                  await axios.post(`${API_BASE}/jobs/${job.id}/abort`);
+                                  // The poller will pick up the status change
+                                } catch (err) { alert("Failed to cancel job"); }
+                            }
+                          }} 
+                          style={{padding: '0.2rem 0.5rem', fontSize: '0.75rem', background: '#b91c1c', marginRight: '0.25rem'}}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      <button 
+                        onClick={async () => {
+                          if(confirm(`Are you sure you want to delete Job #${job.id}? This will remove it from history and delete its logs/outputs.`)) {
+                              try {
+                                await axios.delete(`${API_BASE}/jobs/${job.id}`);
+                                if (selectedJob && selectedJob.id === job.id) setSelectedJob(null);
+                              } catch (err) { alert("Failed to delete job"); }
+                          }
+                        }} 
+                        style={{padding: '0.2rem 0.5rem', fontSize: '0.75rem', background: '#4b5563'}}
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}

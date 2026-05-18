@@ -118,6 +118,48 @@ def run_full_pipeline(cfg: Optional[TrainConfig] = None):
         train_ds_dpo, eval_ds_dpo = preprocess_dpo_dataset(cfg, tokenizer, raw_dataset, logger)
         logger.info("")
         
+        # ========================================
+        # QUALITY GATE: Check for significant data loss
+        # ========================================
+        total_kept = len(train_ds_dpo) + len(eval_ds_dpo)
+        # Compare against the user's requested limit (dataset_len)
+        requested = cfg.dataset_len
+        keep_ratio = total_kept / requested if requested > 0 else 0
+        
+        logger.info(f"Quality Gate Check: Kept {total_kept} / {requested} (Requested) - Ratio: {keep_ratio:.1%}")
+        
+        if keep_ratio < 0.60:
+            logger.warning("=" * 40)
+            logger.warning("CRITICAL DATA LOSS DETECTED (> 40%)")
+            logger.warning("The pipeline is now PAUSED and awaiting UI approval.")
+            logger.warning("=" * 40)
+            
+            # Update database status via a signal file or direct DB access
+            # For process isolation, we'll use a simple file-based signal for 'AWAITING_APPROVAL'
+            # and wait for an 'approved' or 'aborted' file to appear.
+            signal_dir = f"./logs/signals_{timestamp}"
+            os.makedirs(signal_dir, exist_ok=True)
+            with open(f"{signal_dir}/PAUSED", "w") as f:
+                f.write(f"{total_kept}/{requested}")
+            
+            # Loop and wait for approval
+            import time
+            wait_start = time.time()
+            approved = False
+            while time.time() - wait_start < 600: # 10 minute timeout
+                if os.path.exists(f"{signal_dir}/APPROVED"):
+                    logger.info("[OK] Received UI Approval. Continuing training...")
+                    approved = True
+                    break
+                if os.path.exists(f"{signal_dir}/ABORTED"):
+                    logger.error("[ABORT] Received UI Abort signal. Stopping pipeline.")
+                    raise RuntimeError("Pipeline aborted by user due to high data loss.")
+                time.sleep(5)
+            
+            if not approved:
+                logger.error("[TIMEOUT] No approval received within 10 minutes. Aborting.")
+                raise TimeoutError("Pipeline timed out awaiting quality approval.")
+
         logger.info("=" * 80)
         logger.info("[OK] DATA PREPROCESSING COMPLETE")
         logger.info("=" * 80)

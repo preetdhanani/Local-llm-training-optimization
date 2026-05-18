@@ -6,6 +6,9 @@ import multiprocessing
 import time
 import os
 import logging
+import re
+import signal
+import shutil
 
 from . import models, schemas, database
 from .database import engine, get_db
@@ -41,16 +44,133 @@ def get_job_logs(job_id: int, db: Session = Depends(get_db)):
     if not job or not job.log_path:
         raise HTTPException(status_code=404, detail="Job or log path not found")
     
+    # Check for PAUSED signal
+    log_dir = os.path.dirname(job.log_path)
+    # Extract timestamp from log filename: full_pipeline_train_2026-05-18_18-00-13.log
+    match = re.search(r"train_(.*)\.log", os.path.basename(job.log_path))
+    paused_data = None
+    if match:
+        timestamp = match.group(1)
+        signal_path = f"./logs/signals_{timestamp}/PAUSED"
+        if os.path.exists(signal_path):
+            with open(signal_path, "r") as f:
+                paused_data = f.read()
+    
     if not os.path.exists(job.log_path):
-        return {"logs": "Log file not created yet..."}
+        return {"logs": "Log file not created yet...", "paused": False}
         
     try:
         with open(job.log_path, 'r') as f:
             # Return last 100 lines
             lines = f.readlines()
-            return {"logs": "".join(lines[-100:])}
+            return {
+                "logs": "".join(lines[-100:]),
+                "paused": paused_data is not None,
+                "paused_stats": paused_data
+            }
     except Exception as e:
-        return {"logs": f"Error reading logs: {e}"}
+        return {"logs": f"Error reading logs: {e}", "paused": False}
+
+@app.post("/jobs/{job_id}/approve")
+def approve_job(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if not job or not job.log_path: return {"status": "error"}
+    
+    match = re.search(r"train_(.*)\.log", os.path.basename(job.log_path))
+    if match:
+        timestamp = match.group(1)
+        signal_dir = f"./logs/signals_{timestamp}"
+        os.makedirs(signal_dir, exist_ok=True)
+        with open(f"{signal_dir}/APPROVED", "w") as f: f.write("1")
+        # Cleanup paused signal
+        if os.path.exists(f"{signal_dir}/PAUSED"): os.remove(f"{signal_dir}/PAUSED")
+        return {"status": "success"}
+    return {"status": "no_timestamp_found"}
+
+@app.post("/jobs/{job_id}/abort")
+def abort_job(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if not job: return {"status": "error", "detail": "Job not found"}
+    
+    # 1. Kill the process if it's running
+    if job.status == "RUNNING" and job.pid:
+        try:
+            # Use SIGTERM for graceful but firm stop
+            os.kill(job.pid, signal.SIGTERM)
+        except Exception as e:
+            print(f"Failed to kill process {job.pid}: {e}")
+
+    # 2. Set Status in DB
+    job.status = "ABORTED"
+    db.commit()
+
+    # 3. Write signal file for the pipeline loop (if it's in a pause state)
+    if job.log_path:
+        match = re.search(r"train_(.*)\.log", os.path.basename(job.log_path))
+        if match:
+            timestamp = match.group(1)
+            signal_dir = f"./logs/signals_{timestamp}"
+            os.makedirs(signal_dir, exist_ok=True)
+            with open(f"{signal_dir}/ABORTED", "w") as f: f.write("1")
+    
+    return {"status": "success"}
+
+def perform_deep_cleanup(job, db):
+    """Helper to kill process and delete all related files/folders."""
+    try:
+        # 1. Kill if running
+        if job.status == "RUNNING" and job.pid:
+            try:
+                os.kill(job.pid, signal.SIGTERM)
+            except:
+                pass
+
+        # 2. Extract timestamp for folder lookup
+        timestamp = None
+        if job.log_path:
+            match = re.search(r"train_(.*)\.log", os.path.basename(job.log_path))
+            if match:
+                timestamp = match.group(1)
+
+        # 3. Delete log file
+        if job.log_path and os.path.exists(job.log_path):
+            try:
+                os.remove(job.log_path)
+            except:
+                pass
+
+        # 4. Cleanup signals and outputs
+        if timestamp:
+            shutil.rmtree(f"./logs/signals_{timestamp}", ignore_errors=True)
+            shutil.rmtree(f"./outputs/sft_output_{timestamp}", ignore_errors=True)
+            shutil.rmtree(f"./outputs/dpo_output_{timestamp}", ignore_errors=True)
+
+        # 5. Delete from DB
+        db.delete(job)
+        db.commit()
+    except Exception as e:
+        print(f"Cleanup error for job {job.id}: {e}")
+        # Always try to delete from DB even if file cleanup fails
+        try:
+            db.delete(job)
+            db.commit()
+        except:
+            pass
+
+@app.delete("/jobs/{job_id}")
+def delete_job(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    perform_deep_cleanup(job, db)
+    return {"status": "success"}
+
+@app.delete("/jobs")
+def delete_all_jobs(db: Session = Depends(get_db)):
+    jobs = db.query(models.Job).all()
+    for job in jobs:
+        perform_deep_cleanup(job, db)
+    return {"status": "success", "count": len(jobs)}
 
 def run_training_task(job_id: int, config_dict: dict):
     """
