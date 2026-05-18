@@ -31,10 +31,11 @@ Thumbs.db
 .env
 
 .cache/*
-.logs/*
-.outputs/*
+logs/*
+outputs/*
 
 *.md
 !README.md
 
 *.db
+wandb/*
