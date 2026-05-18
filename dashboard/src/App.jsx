@@ -38,15 +38,6 @@ function App() {
     wandb_project: "rlhf-handson-pytorch"
   });
 
-  const loadTestDefaults = () => {
-    setConfig(prev => ({
-      ...prev,
-      model_id: "hf-internal-testing/tiny-random-LlamaForCausalLM",
-      dataset_path: "test_datasets/standard_test_data.csv",
-      dataset_len: 40
-    }));
-  };
-
   // Poll for data
   useEffect(() => {
     const fetchData = async () => {
@@ -156,17 +147,9 @@ function App() {
           </section>
 
           <section className="card">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Settings size={20} color="#94a3b8" />
-                <h2 style={{ margin: 0 }}>Training Configuration</h2>
-              </div>
-              <button 
-                onClick={loadTestDefaults}
-                style={{ background: 'transparent', color: '#60a5fa', border: '1px solid #60a5fa', padding: '0.2rem 0.6rem', fontSize: '0.75rem', borderRadius: '4px' }}
-              >
-                Load Test Defaults
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+              <Settings size={20} color="#94a3b8" />
+              <h2 style={{ margin: 0 }}>Training Configuration</h2>
             </div>
             
             <div className="form-group" style={{display: 'flex', flexDirection: 'column', gap: '0.75rem'}}>
@@ -395,10 +378,18 @@ function App() {
                               try {
                                 await axios.delete(`${API_BASE}/jobs/${job.id}`);
                                 if (selectedJob && selectedJob.id === job.id) setSelectedJob(null);
-                              } catch (err) { alert("Failed to delete job"); }
+                              } catch (err) { alert(err.response?.data?.detail || "Failed to delete job"); }
                           }
                         }} 
-                        style={{padding: '0.2rem 0.5rem', fontSize: '0.75rem', background: '#4b5563'}}
+                        disabled={job.status === 'RUNNING' || job.status === 'AWAITING_APPROVAL'}
+                        title={ (job.status === 'RUNNING' || job.status === 'AWAITING_APPROVAL') ? "Cancel the job before deleting" : "Delete this job" }
+                        style={{
+                          padding: '0.2rem 0.5rem', 
+                          fontSize: '0.75rem', 
+                          background: (job.status === 'RUNNING' || job.status === 'AWAITING_APPROVAL') ? '#334155' : '#4b5563',
+                          cursor: (job.status === 'RUNNING' || job.status === 'AWAITING_APPROVAL') ? 'not-allowed' : 'pointer',
+                          opacity: (job.status === 'RUNNING' || job.status === 'AWAITING_APPROVAL') ? 0.5 : 1
+                        }}
                       >
                         Delete
                       </button>

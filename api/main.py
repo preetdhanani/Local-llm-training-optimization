@@ -162,15 +162,22 @@ def delete_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(models.Job).filter(models.Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.status in ["RUNNING", "AWAITING_APPROVAL"]:
+        raise HTTPException(status_code=400, detail="Cannot delete an active job. Please Cancel/Abort it first.")
+        
     perform_deep_cleanup(job, db)
     return {"status": "success"}
 
 @app.delete("/jobs")
 def delete_all_jobs(db: Session = Depends(get_db)):
-    jobs = db.query(models.Job).all()
+    # Only delete terminal jobs (COMPLETED, FAILED, ABORTED)
+    jobs = db.query(models.Job).filter(models.Job.status.notin_(["RUNNING", "AWAITING_APPROVAL"])).all()
+    count = 0
     for job in jobs:
         perform_deep_cleanup(job, db)
-    return {"status": "success", "count": len(jobs)}
+        count += 1
+    return {"status": "success", "count": count}
 
 def run_training_task(job_id: int, config_dict: dict):
     """
