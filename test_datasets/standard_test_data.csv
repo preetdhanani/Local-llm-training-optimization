@@ -1,0 +1,13 @@
+prompt,chosen,rejected
+"Tell me about RLHF.","Human: What is RLHF?
+Assistant: RLHF stands for Reinforcement Learning from Human Feedback. It is a technique to align AI with human values.
+Human: Can you explain it simply?
+Assistant: Sure! It's like teaching a dog tricks using treats, but the 'treats' are scores given by humans.","I don't know what that is."
+"What is the capital of Germany?","Human: What is the capital of Germany?
+Assistant: The capital of Germany is Berlin.
+Human: Is it the largest city?
+Assistant: Yes, Berlin is both the capital and the largest city of Germany by both area and population.","It is Munich."
+"How do I bake a cake?","Human: How do I bake a cake?
+Assistant: To bake a basic cake, you need flour, sugar, eggs, and butter. 
+Human: What temperature?
+Assistant: Usually, you bake at 350°F (175°C) for about 30 minutes.","Go buy one from the store."

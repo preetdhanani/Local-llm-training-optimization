@@ -50,39 +50,27 @@ def preprocess_sft_dataset(
 
 
 def load_sft_dataset(cfg, tokenizer):
-    """Load and prepare SFT dataset."""
-    if cfg.dataset_type == "local" and cfg.dataset_path:
-        if not os.path.exists(cfg.dataset_path):
-            raise FileNotFoundError(f"Local dataset not found at: {cfg.dataset_path}")
-        
-        # Determine format from extension
-        ext = os.path.splitext(cfg.dataset_path)[1].lower()
-        try:
-            if ext == ".csv":
-                ds = load_dataset("csv", data_files=cfg.dataset_path, split="train")
-            elif ext in [".json", ".jsonl"]:
-                ds = load_dataset("json", data_files=cfg.dataset_path, split="train")
-            else:
-                raise ValueError(f"Unsupported local file extension: {ext}")
-        except Exception as e:
-            raise RuntimeError(f"Failed to load local {ext} dataset: {e}")
+    """Load and prepare SFT dataset (Strict Local 3-column Standard)."""
+    if not cfg.dataset_path or not os.path.exists(cfg.dataset_path):
+        raise FileNotFoundError(f"Required local dataset not found at: {cfg.dataset_path}")
+    
+    ext = os.path.splitext(cfg.dataset_path)[1].lower()
+    try:
+        if ext == ".csv":
+            ds = load_dataset("csv", data_files=cfg.dataset_path, split="train")
+        elif ext in [".json", ".jsonl"]:
+            ds = load_dataset("json", data_files=cfg.dataset_path, split="train")
+        else:
+            raise ValueError(f"Unsupported local file extension: {ext}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to load local dataset: {e}")
 
-        # Check for required columns if using custom mapping
-        if cfg.dataset_format == "custom_columns":
-            missing = [col for col in [cfg.prompt_column, cfg.chosen_column] if col not in ds.column_names]
-            if missing:
-                raise ValueError(f"Required columns {missing} not found in dataset. Available: {ds.column_names}")
-    else:
-        try:
-            ds = load_dataset(
-                cfg.dataset_name,
-                split="train",
-                num_proc=1,
-                keep_in_memory=False,
-                download_mode="force_redownload",
-            )
-        except Exception as e:
-            raise RuntimeError(f"Failed to download dataset '{cfg.dataset_name}': {e}")
+    # Strict Schema Check
+    required = ["prompt", "chosen", "rejected"]
+    missing = [col for col in required if col not in ds.column_names]
+    if missing:
+        raise ValueError(f"CRITICAL: Dataset missing standard columns: {missing}. "
+                         f"Your file must have 'prompt', 'chosen', and 'rejected'.")
 
     return preprocess_sft_dataset(cfg, tokenizer, ds)
 
@@ -184,38 +172,26 @@ def load_dpo_dataset(
     cfg: TrainConfig,
     tokenizer: AutoTokenizer,
 ) -> Tuple[Dataset, Dataset]:
-    """
-    Load and prepare dataset for DPO training.
-    """
-    if cfg.dataset_type == "local" and cfg.dataset_path:
-        if not os.path.exists(cfg.dataset_path):
-            raise FileNotFoundError(f"Local dataset not found at: {cfg.dataset_path}")
+    """Load and prepare DPO dataset (Strict Local 3-column Standard)."""
+    if not cfg.dataset_path or not os.path.exists(cfg.dataset_path):
+        raise FileNotFoundError(f"Required local dataset not found at: {cfg.dataset_path}")
 
-        ext = os.path.splitext(cfg.dataset_path)[1].lower()
-        try:
-            if ext == ".csv":
-                ds = load_dataset("csv", data_files=cfg.dataset_path, split="train")
-            elif ext in [".json", ".jsonl"]:
-                ds = load_dataset("json", data_files=cfg.dataset_path, split="train")
-            else:
-                raise ValueError(f"Unsupported local file extension: {ext}")
-        except Exception as e:
-            raise RuntimeError(f"Failed to load local {ext} dataset: {e}")
+    ext = os.path.splitext(cfg.dataset_path)[1].lower()
+    try:
+        if ext == ".csv":
+            ds = load_dataset("csv", data_files=cfg.dataset_path, split="train")
+        elif ext in [".json", ".jsonl"]:
+            ds = load_dataset("json", data_files=cfg.dataset_path, split="train")
+        else:
+            raise ValueError(f"Unsupported file extension: {ext}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to load local dataset: {e}")
 
-        # Check for required columns if using custom mapping
-        if cfg.dataset_format == "custom_columns":
-            missing = [col for col in [cfg.prompt_column, cfg.chosen_column, cfg.rejected_column] if col not in ds.column_names]
-            if missing:
-                raise ValueError(f"Required DPO columns {missing} not found in dataset. Available: {ds.column_names}")
-    else:
-        try:
-            dataset_config = getattr(cfg, 'dataset_config', None)
-            if dataset_config:
-                ds = load_dataset(cfg.dataset_name, dataset_config, split="train")
-            else:
-                ds = load_dataset(cfg.dataset_name, split="train", keep_in_memory=False)
-        except Exception as e:
-            raise RuntimeError(f"Failed to download DPO dataset '{cfg.dataset_name}': {e}")
+    # Strict Schema Check
+    required = ["prompt", "chosen", "rejected"]
+    missing = [col for col in required if col not in ds.column_names]
+    if missing:
+        raise ValueError(f"CRITICAL: Dataset missing standard columns: {missing}.")
 
     return preprocess_dpo_dataset(cfg, tokenizer, ds)
 

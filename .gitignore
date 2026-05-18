@@ -21,6 +21,8 @@ Thumbs.db
 *.tmp
 *.swp
 
+*.skill
+
 # Ignore Jupyter notebooks and their outputs
 .ipynb_checkpoints/
 *~
@@ -31,3 +33,8 @@ Thumbs.db
 .cache/*
 .logs/*
 .outputs/*
+
+*.md
+!README.md
+
+*.db
