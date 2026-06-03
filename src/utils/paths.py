@@ -17,7 +17,11 @@ def get_timestamped_output_dir(base_dir: str, prefix: str = "") -> str:
     Returns:
         Full path to timestamped directory (not created yet)
     """
-    os.makedirs(base_dir, exist_ok=True)
+    try:
+        os.makedirs(base_dir, exist_ok=True)
+    except FileExistsError:
+        if not os.path.isdir(base_dir):
+            raise
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     
     if prefix:

@@ -18,28 +18,64 @@ This repository operates on a split frontend-backend architecture designed for r
 
 ---
 
-## ⚡ Quick Start: 1-Shot Docker Setup (Single Container)
+## 🐳 Run with Docker
 
-We configure the React frontend to compile and build inside the image, allowing **FastAPI to serve both the API and the React website directly on port 6767** from a single Docker container.
+We provide a unified Docker container holding both the React dashboard and the FastAPI training engine. You can run the official pre-built image instantly, or build it locally from source.
 
-### 1. Prerequisites
-- [Docker](https://www.docker.com/get-started/) and [Docker Compose](https://docs.docker.com/compose/) installed.
-- *(Optional)* [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) to enable GPU acceleration in Docker.
-
-### 2. Startup Command
-Run the following command in the root folder of the project:
+### 1. Instant Run (Recommended)
+You can launch the entire platform with a single command without downloading any source code:
 ```bash
-docker compose up --build
+docker run -d --name rlhf-app `
+  -p 6767:6767 `
+  -v ./logs:/app/logs `
+  -v ./outputs:/app/outputs `
+  -v ./jobs.db:/app/jobs.db `
+  -v ./.cache:/app/.cache `
+  -v ./test_datasets:/app/test_datasets `
+  pd84697/rlhf-handson-pytorch-rlhf-app:latest
+```
+*(Note: Use backticks `` ` `` for line continuation in Windows PowerShell, or backslashes `\` in Linux/macOS).*
+
+Once running, access the services:
+* **Dashboard UI & API**: [http://localhost:6767](http://localhost:6767)
+* **Interactive API Documentation**: [http://localhost:6767/docs](http://localhost:6767/docs)
+
+### 2. Docker Compose (Build from Source)
+If you have cloned the repository and want to run a local build:
+```bash
+docker compose up --build -d
 ```
 
-- **Dashboard UI & Backend API**: [http://localhost:6767](http://localhost:6767)
-- **API Documentation**: [http://localhost:6767/docs](http://localhost:6767/docs)
-- **API Health Check**: [http://localhost:6767/env-check](http://localhost:6767/env-check)
+### 3. Persistent Volumes
+To prevent data loss and cached weight redownloads when restarting containers, make sure these volumes are mounted:
 
-> [!TIP]
-> **Enabling GPUs in Docker**: If you have an NVIDIA GPU, edit the `docker-compose.yml` file and uncomment the `deploy` configuration block under the `rlhf-app` service. This exposes the host GPU drivers to the training engine.
-> 
-> **Model Caching**: Hugging Face models are cached inside the project's local `.cache/` folder (both in Docker and local mode). This ensures that once a model is downloaded, it is loaded locally and never downloaded again.
+| Host Path | Container Path | Purpose |
+| :--- | :--- | :--- |
+| `./logs` | `/app/logs` | Live streaming training process logs |
+| `./outputs` | `/app/outputs` | Saved SFT and DPO model adapters/checkpoints |
+| `./jobs.db` | `/app/jobs.db` | SQLite registry database tracking job runs |
+| `./.cache` | `/app/.cache` | Persistent cache to prevent redownloading base models |
+| `./test_datasets` | `/app/test_datasets` | Ingestion folder for your custom CSV/JSONL datasets |
+
+### 4. GPU / CUDA Configuration
+By default, Docker containers are isolated from your host system's hardware. To enable NVIDIA GPU training inside Docker:
+
+* **For Docker Compose**:
+  Open `docker-compose.yml` and ensure the GPU resource reservation block is uncommented under the `rlhf-app` service:
+  ```yaml
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+  ```
+* **For Docker CLI**:
+  Add the `--gpus all` flag to your run command:
+  ```bash
+  docker run --gpus all -d -p 6767:6767 -v ... pd84697/rlhf-handson-pytorch-rlhf-app:latest
+  ```
 
 ---
 
@@ -69,7 +105,7 @@ npm install
 cd ..
 ```
 
-### 4. Running the Complete Stack (1-Shot)
+### 4. Running the Complete Stack
 To launch both the FastAPI backend (port 8000) and React Vite server (port 6767) concurrently, run the orchestrator script:
 ```bash
 python run_dev.py
@@ -90,19 +126,6 @@ You can fine-tune both models hosted on **Hugging Face** and models stored **loc
 Simply enter the absolute or relative path to your local model folder (which must contain the standard config/model files like `config.json`, `model.safetensors`, etc.) in the **Model ID / Path** input field in the dashboard.
 - *Example Absolute Path (Windows)*: `C:/models/Qwen2.5-0.5B` (always use forward slashes `/` to avoid string escaping issues).
 - *Example Relative Path*: `models/Qwen2.5-0.5B`
-
-### 2. In Docker Mode
-Since containers have isolated filesystems, you must mount the host directory containing your models into the container first:
-1. Open `docker-compose.yml` and add a volume mapping under the `rlhf-app` service:
-   ```yaml
-   volumes:
-     - ./logs:/app/logs
-     - ./outputs:/app/outputs
-     - ./jobs.db:/app/jobs.db
-     - ./.cache:/app/.cache
-     - C:/path/to/your/models:/models  # Map your host models directory
-   ```
-2. In the Dashboard UI, specify the path relative to the container mount: `/models/Qwen2.5-0.5B`.
 
 ---
 

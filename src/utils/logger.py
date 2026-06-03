@@ -18,7 +18,11 @@ def get_timestamped_log_path(trainer_name: str) -> str:
     Returns:
         Full path to timestamped log file
     """
-    os.makedirs("logs", exist_ok=True)
+    try:
+        os.makedirs("logs", exist_ok=True)
+    except FileExistsError:
+        if not os.path.isdir("logs"):
+            raise
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     return f"logs/{trainer_name}_train_{timestamp}.log"
 
@@ -58,7 +62,12 @@ def setup_logger(
 
     # File handler (if specified)
     if log_file:
-        os.makedirs(os.path.dirname(log_file) if os.path.dirname(log_file) else ".", exist_ok=True)
+        log_dir = os.path.dirname(log_file) if os.path.dirname(log_file) else "."
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+        except FileExistsError:
+            if not os.path.isdir(log_dir):
+                raise
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(formatter)
         file_handler.flush()

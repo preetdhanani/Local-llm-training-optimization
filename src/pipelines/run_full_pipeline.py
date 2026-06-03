@@ -42,7 +42,11 @@ def run_full_pipeline(cfg: Optional[TrainConfig] = None):
     cfg.dpo_output_dir = f"./outputs/dpo_output_{timestamp}"
 
     # Ensure base outputs directory exists
-    os.makedirs("./outputs", exist_ok=True)
+    try:
+        os.makedirs("./outputs", exist_ok=True)
+    except FileExistsError:
+        if not os.path.isdir("./outputs"):
+            raise
     
     run_group = cfg.wandb_group or format_group_name(cfg.model_id, timestamp)
 
