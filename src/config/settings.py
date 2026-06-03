@@ -1,6 +1,11 @@
 """Centralized configuration for all training."""
+import os
 from dataclasses import dataclass
 from typing import Optional
+
+# Unified Hugging Face cache directory inside project's local .cache folder
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+os.environ["HF_HOME"] = os.path.join(_project_root, ".cache")
 
 
 @dataclass

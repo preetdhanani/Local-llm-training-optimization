@@ -3,9 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 import multiprocessing
-import time
 import os
-import logging
 import re
 import signal
 import shutil
@@ -14,7 +12,6 @@ from . import models, schemas, database
 from .database import engine, get_db
 from .env_manager import check_environment
 from src.config import TrainConfig
-from src.pipelines.run_full_pipeline import run_full_pipeline
 
 # Create tables
 models.Base.metadata.create_all(bind=engine)
@@ -24,7 +21,7 @@ app = FastAPI(title="RLHF Dashboard API")
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite default port
+    allow_origins=["http://localhost:6767"],  # New dashboard port
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -184,6 +181,13 @@ def run_training_task(job_id: int, config_dict: dict):
     Background worker that runs the actual training pipeline.
     """
     from .database import SessionLocal
+    try:
+        from src.pipelines.run_full_pipeline import run_full_pipeline
+    except ImportError as exc:
+        raise RuntimeError(
+            "Training dependencies are not installed in this image. Use the full training image or install requirements.txt."
+        ) from exc
+
     db = SessionLocal()
     job = db.query(models.Job).filter(models.Job.id == job_id).first()
     

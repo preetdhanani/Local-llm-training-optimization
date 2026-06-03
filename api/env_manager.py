@@ -1,4 +1,3 @@
-import torch
 import sys
 
 def check_environment():
@@ -8,7 +7,7 @@ def check_environment():
     results = {
         "status": "ready",
         "python_version": sys.version,
-        "torch_installed": True,
+        "torch_installed": False,
         "cuda_available": torch.cuda.is_available(),
         "device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
         "devices": [],
@@ -16,13 +15,21 @@ def check_environment():
         "errors": []
     }
 
-    # Check devices
-    if results["cuda_available"]:
-        for i in range(results["device_count"]):
-            results["devices"].append({
-                "name": torch.cuda.get_device_name(i),
-                "vram": f"{torch.cuda.get_device_properties(i).total_memory / 1024**3:.2f} GB"
-            })
+    try:
+        import torch
+        results["torch_installed"] = True
+        results["cuda_available"] = torch.cuda.is_available()
+        results["device_count"] = torch.cuda.device_count() if torch.cuda.is_available() else 0
+
+        if results["cuda_available"]:
+            for i in range(results["device_count"]):
+                results["devices"].append({
+                    "name": torch.cuda.get_device_name(i),
+                    "vram": f"{torch.cuda.get_device_properties(i).total_memory / 1024**3:.2f} GB"
+                })
+    except Exception as e:
+        results["errors"].append(f"torch loading failed: {e}")
+        results["status"] = "warning"
     
     # Check bitsandbytes
     try:

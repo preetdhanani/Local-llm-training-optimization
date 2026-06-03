@@ -1,29 +1,40 @@
-# RLHF Dashboard: Standardized On-Premise Training
+# 🚀 RLHF Dashboard: Standardized On-Premise Training
 
-A professional, privacy-first RLHF (Reinforcement Learning from Human Feedback) pipeline with a modern React/FastAPI dashboard. Designed for "Local-First" training, this project ensures GDPR compliance by processing sensitive data entirely on your machine.
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![React Version](https://img.shields.io/badge/react-19.0-cyan.svg)](https://react.dev/)
 
-## 🚀 Key Features
-- **Strict Data Standard**: Uses an industry-standard 3-column CSV/JSONL format.
-- **Modern Dashboard**: React + Vite frontend with real-time log streaming.
-- **Robust Backend**: FastAPI + SQLite job registry tracks every training run.
-- **Process Isolation**: Ensures 100% VRAM recovery after every job.
-- **Pre-flight Health**: Checks GPU, CUDA, and library health before training.
+A professional, privacy-first RLHF (Reinforcement Learning from Human Feedback) training pipeline equipped with a modern React + Vite dashboard and FastAPI backend. Specifically engineered for **"Local-First"** environments, this framework ensures GDPR and enterprise privacy compliance by keeping training data and model weights entirely on your own infrastructure.
 
 ---
 
-## 🛠️ Installation & Setup
+## 🏗️ System Architecture
+
+This repository operates on a split frontend-backend architecture designed for robustness and process isolation:
+1. **React Dashboard (Frontend)**: Real-time UI for configuring training parameters, submitting jobs, and live streaming execution logs.
+2. **FastAPI Server (Backend)**: Orchestrates model configurations, maintains the job run database (SQLite), and schedules training.
+3. **Training Engine (Isolated Process)**: Initiates isolated PyTorch processes running SFT (Supervised Fine-Tuning) and DPO (Direct Preference Optimization) pipelines, freeing 100% of VRAM upon completion or termination.
+
+---
+
+---
+
+## 🛠️ Local Development Setup
+
+Run and modify the project locally with your Python and Node.js environments:
 
 ### 1. Requirements
-- **Hardware**: NVIDIA GPU (6GB+ VRAM recommended).
+- NVIDIA GPU is required.
 - **Software**: Python 3.10+, Node.js 18+.
 
 ### 2. Backend Setup
+Activate a virtual environment and install the requirements:
 ```bash
 # Create and activate environment
 python -m venv .venv
-source .venv/bin/activate  # Or .venv\Scripts\activate on Windows
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install Python dependencies
+# Install dependencies (includes PyTorch, HF transformers, TRL, etc.)
 pip install -r requirements.txt
 ```
 
@@ -31,46 +42,84 @@ pip install -r requirements.txt
 ```bash
 cd dashboard
 npm install
+cd ..
 ```
+
+### 4. Running the Complete Stack (1-Shot)
+To launch both the FastAPI backend and React Vite server concurrently, run the orchestrator script:
+```bash
+python run_dev.py
+```
+This utility automatically:
+- Checks and installs missing dashboard dependencies.
+- Runs both servers concurrently.
+- Streams stdout/stderr from both processes, using prefixes (`[Backend]` / `[Frontend]`) for clarity.
+- Cleans up and shuts down all child processes upon pressing `Ctrl+C`.
+
+## 🤖 Specifying Local Model Paths
+
+You can fine-tune both models hosted on **Hugging Face** and models stored **locally** on your machine.
+
+### 1. In Local Development Mode (`run_dev.py`)
+Simply enter the absolute or relative path to your local model folder (which must contain the standard config/model files like `config.json`, `model.safetensors`, etc.) in the **Model ID / Path** input field in the dashboard.
+- *Example Absolute Path (Windows)*: `C:/models/Qwen2.5-0.5B` (always use forward slashes `/` to avoid string escaping issues).
+- *Example Relative Path*: `models/Qwen2.5-0.5B`
 
 ---
 
-## 📂 Dataset Standard
-This project enforces a strict local ingestion standard. Your training file must be a `.csv` or `.jsonl` with exactly these three column headers:
+## 📂 Dataset Ingestion Standard
 
-| Column | Description | Example Content |
+The training pipeline enforces a strict format to prevent common dataset formatting issues. Your training dataset file must be a `.csv` or `.jsonl` file containing exactly these three columns:
+
+| Column Header | Description | Example Content |
 | :--- | :--- | :--- |
-| **prompt** | The initial query or context. | "Explain RLHF simply." |
-| **chosen** | The preferred multi-turn conversation. | "Human: ... \n\nAssistant: ..." |
-| **rejected** | The poor-quality response to avoid. | "I don't know." |
+| `prompt` | The context or query given to the model. | `"Explain RLHF simply."` |
+| `chosen` | The preferred high-quality response or conversation. | `"Human: ... \n\nAssistant: [high-quality response]"` |
+| `rejected` | The poor-quality response to avoid. | `"Human: ... \n\nAssistant: [low-quality response]"` |
 
-> **Note**: For best results, use `Human:` and `Assistant:` markers within your chosen/rejected strings for multi-turn training.
-
----
-
-## 🏃 Running the Project
-
-### Phase 1: Start the Backend
-From the project root:
-```bash
-python -m uvicorn api.main:app --reload
-```
-- API Documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
-- Health Check: [http://localhost:8000/env-check](http://localhost:8000/env-check)
-
-### Phase 2: Start the Dashboard
-In a new terminal:
-```bash
-cd dashboard
-npm run dev
-```
-- Dashboard UI: [http://localhost:5173](http://localhost:5173)
+> [!NOTE]
+> For best multi-turn training results, make sure `Human:` and `Assistant:` conversation markers are included in your chosen and rejected strings.
 
 ---
 
-## 🧪 Quick Smoke Test
-1. Open the Dashboard.
-2. In **Local Dataset Path**, enter: `test_datasets/standard_test_data.csv`.
-3. Set **Max Training Rows** to `3`.
-4. Click **Run Full RLHF Pipeline**.
-5. Watch the live logs stream your training progress!
+## 🧪 Smoke Test / Verification
+
+To verify that your environment is fully configured and ready for training:
+
+1. Launch the application with `run_dev.py`.
+2. Open the dashboard at [http://localhost:6767](http://localhost:6767).
+3. Under **Local Dataset Path**, enter the path to the standard test dataset:
+   `test_datasets/standard_test_data.csv`
+4. Set **Max Training Rows** to `3` (to limit the run size for testing).
+5. Click **Run Full RLHF Pipeline**.
+6. Observe the live logs streaming directly to the dashboard, guiding you through the SFT and DPO stages.
+
+---
+
+## 📁 Repository Structure
+
+```
+.
+├── api/                  # FastAPI codebase
+│   ├── database.py       # SQLAlchemy database engine
+│   ├── env_manager.py    # GPU & environment check helper
+│   ├── main.py           # API endpoints & runner isolation
+│   ├── models.py         # SQLAlchemy schemas (SQLite)
+│   └── schemas.py        # Pydantic payloads
+├── dashboard/            # React + Vite frontend
+│   ├── src/              # React components & UI logic
+│   ├── nginx.conf        # Nginx config for static routing
+│   └── nginx.conf        # Nginx config for static routing
+├── src/                  # Core RLHF pipeline codebase
+│   ├── config.py         # Model/Training configs
+│   ├── pipelines/        # Pipeline orchestration (SFT -> DPO)
+│   └── utils/            # Shared log and system utilities
+├── run_dev.py            # Local development concurrent orchestrator
+└── README.md             # This document
+```
+
+---
+
+## 📄 License
+
+This project is open-source and licensed under the [MIT License](LICENSE).

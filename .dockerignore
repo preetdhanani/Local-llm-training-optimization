@@ -1,0 +1,35 @@
+# Ignore python virtual environments
+.venv/
+venv/
+ENV/
+
+# Ignore local database and logs
+*.db
+jobs.db
+logs/
+outputs/
+
+# Ignore cache directories
+.cache/
+.pytest_cache/
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore frontend build files and dependencies
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
+
+# Ignore git metadata
+.git/
+.gitignore
+
+# Ignore IDE settings and system files
+.vscode/
+.idea/
+.antigravitycli/
+.DS_Store
+Thumbs.db

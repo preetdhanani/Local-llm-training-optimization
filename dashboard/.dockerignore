@@ -1,0 +1,14 @@
+# Ignore dependencies
+node_modules/
+
+# Ignore production builds
+dist/
+build/
+
+# Ignore local env and system files
+.env
+.env.local
+.DS_Store
+.vite/
+nginx.conf
+Dockerfile
