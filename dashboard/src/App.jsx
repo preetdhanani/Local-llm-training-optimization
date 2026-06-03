@@ -351,7 +351,24 @@ function App() {
                       </span>
                     </td>
                     <td>
-                      <button onClick={() => setSelectedJob(job)} style={{padding: '0.2rem 0.5rem', fontSize: '0.75rem'}}>View Logs</button>
+                      <button onClick={() => setSelectedJob(job)} style={{padding: '0.2rem 0.5rem', fontSize: '0.75rem', marginRight: '0.25rem'}}>View Logs</button>
+                      {job.status === 'COMPLETED' && (
+                        <a 
+                          href={`${API_BASE}/jobs/${job.id}/download`} 
+                          download
+                          style={{
+                            padding: '0.2rem 0.5rem', 
+                            fontSize: '0.75rem', 
+                            background: '#059669', 
+                            color: 'white', 
+                            textDecoration: 'none', 
+                            borderRadius: '4px',
+                            display: 'inline-block'
+                          }}
+                        >
+                          Download Outputs
+                        </a>
+                      )}
                     </td>
                     <td>
                       {(job.status === 'RUNNING' || job.status === 'AWAITING_APPROVAL') && (

@@ -287,6 +287,61 @@ def start_dummy_job(db: Session = Depends(get_db)):
 
 
 # ==========================================
+# Download Job Outputs Archive
+# ==========================================
+def remove_file(path: str):
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except:
+            pass
+
+@app.get("/jobs/{job_id}/download")
+def download_job_outputs(job_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "COMPLETED":
+        raise HTTPException(status_code=400, detail="Only completed jobs can be downloaded")
+    
+    timestamp = None
+    if job.log_path:
+        match = re.search(r"train_(.*)\.log", os.path.basename(job.log_path))
+        if match:
+            timestamp = match.group(1)
+            
+    if not timestamp:
+        raise HTTPException(status_code=404, detail="No outputs timestamp found for this job")
+        
+    sft_dir = f"./outputs/sft_output_{timestamp}"
+    dpo_dir = f"./outputs/dpo_output_{timestamp}"
+    
+    if not os.path.exists(sft_dir) and not os.path.exists(dpo_dir):
+        raise HTTPException(status_code=404, detail="Output directories not found on disk")
+        
+    zip_filename = f"job_{job_id}_outputs.zip"
+    zip_path = os.path.join("./outputs", zip_filename)
+    
+    try:
+        import zipfile
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for folder in [sft_dir, dpo_dir]:
+                if os.path.exists(folder):
+                    for root, dirs, files in os.walk(folder):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            rel_path = os.path.relpath(file_path, os.path.dirname(folder))
+                            zipf.write(file_path, rel_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create archive: {e}")
+        
+    background_tasks.add_task(remove_file, zip_path)
+    
+    from fastapi.responses import FileResponse
+    return FileResponse(zip_path, media_type="application/zip", filename=zip_filename)
+
+
+# ==========================================
 # Serve Frontend Static Assets
 # ==========================================
 from fastapi.staticfiles import StaticFiles
