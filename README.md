@@ -2,6 +2,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Docker Support](https://img.shields.io/badge/docker-supported-blue.svg)](https://www.docker.com/)
 [![React Version](https://img.shields.io/badge/react-19.0-cyan.svg)](https://react.dev/)
 
 A professional, privacy-first RLHF (Reinforcement Learning from Human Feedback) training pipeline equipped with a modern React + Vite dashboard and FastAPI backend. Specifically engineered for **"Local-First"** environments, this framework ensures GDPR and enterprise privacy compliance by keeping training data and model weights entirely on your own infrastructure.
@@ -17,11 +18,34 @@ This repository operates on a split frontend-backend architecture designed for r
 
 ---
 
+## ⚡ Quick Start: 1-Shot Docker Setup (Single Container)
+
+We configure the React frontend to compile and build inside the image, allowing **FastAPI to serve both the API and the React website directly on port 6767** from a single Docker container.
+
+### 1. Prerequisites
+- [Docker](https://www.docker.com/get-started/) and [Docker Compose](https://docs.docker.com/compose/) installed.
+- *(Optional)* [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) to enable GPU acceleration in Docker.
+
+### 2. Startup Command
+Run the following command in the root folder of the project:
+```bash
+docker compose up --build
+```
+
+- **Dashboard UI & Backend API**: [http://localhost:6767](http://localhost:6767)
+- **API Documentation**: [http://localhost:6767/docs](http://localhost:6767/docs)
+- **API Health Check**: [http://localhost:6767/env-check](http://localhost:6767/env-check)
+
+> [!TIP]
+> **Enabling GPUs in Docker**: If you have an NVIDIA GPU, edit the `docker-compose.yml` file and uncomment the `deploy` configuration block under the `rlhf-app` service. This exposes the host GPU drivers to the training engine.
+> 
+> **Model Caching**: Hugging Face models are cached inside the project's local `.cache/` folder (both in Docker and local mode). This ensures that once a model is downloaded, it is loaded locally and never downloaded again.
+
 ---
 
 ## 🛠️ Local Development Setup
 
-Run and modify the project locally with your Python and Node.js environments:
+If you prefer to run and modify the project locally without Docker:
 
 ### 1. Requirements
 - NVIDIA GPU is required.
@@ -46,7 +70,7 @@ cd ..
 ```
 
 ### 4. Running the Complete Stack (1-Shot)
-To launch both the FastAPI backend and React Vite server concurrently, run the orchestrator script:
+To launch both the FastAPI backend (port 8000) and React Vite server (port 6767) concurrently, run the orchestrator script:
 ```bash
 python run_dev.py
 ```
@@ -56,6 +80,8 @@ This utility automatically:
 - Streams stdout/stderr from both processes, using prefixes (`[Backend]` / `[Frontend]`) for clarity.
 - Cleans up and shuts down all child processes upon pressing `Ctrl+C`.
 
+---
+
 ## 🤖 Specifying Local Model Paths
 
 You can fine-tune both models hosted on **Hugging Face** and models stored **locally** on your machine.
@@ -64,6 +90,19 @@ You can fine-tune both models hosted on **Hugging Face** and models stored **loc
 Simply enter the absolute or relative path to your local model folder (which must contain the standard config/model files like `config.json`, `model.safetensors`, etc.) in the **Model ID / Path** input field in the dashboard.
 - *Example Absolute Path (Windows)*: `C:/models/Qwen2.5-0.5B` (always use forward slashes `/` to avoid string escaping issues).
 - *Example Relative Path*: `models/Qwen2.5-0.5B`
+
+### 2. In Docker Mode
+Since containers have isolated filesystems, you must mount the host directory containing your models into the container first:
+1. Open `docker-compose.yml` and add a volume mapping under the `rlhf-app` service:
+   ```yaml
+   volumes:
+     - ./logs:/app/logs
+     - ./outputs:/app/outputs
+     - ./jobs.db:/app/jobs.db
+     - ./.cache:/app/.cache
+     - C:/path/to/your/models:/models  # Map your host models directory
+   ```
+2. In the Dashboard UI, specify the path relative to the container mount: `/models/Qwen2.5-0.5B`.
 
 ---
 
@@ -86,7 +125,7 @@ The training pipeline enforces a strict format to prevent common dataset formatt
 
 To verify that your environment is fully configured and ready for training:
 
-1. Launch the application with `run_dev.py`.
+1. Launch the application (either via Docker Compose or `run_dev.py`).
 2. Open the dashboard at [http://localhost:6767](http://localhost:6767).
 3. Under **Local Dataset Path**, enter the path to the standard test dataset:
    `test_datasets/standard_test_data.csv`
@@ -103,17 +142,18 @@ To verify that your environment is fully configured and ready for training:
 ├── api/                  # FastAPI codebase
 │   ├── database.py       # SQLAlchemy database engine
 │   ├── env_manager.py    # GPU & environment check helper
-│   ├── main.py           # API endpoints & runner isolation
+│   ├── main.py           # API endpoints & runner isolation & static files
 │   ├── models.py         # SQLAlchemy schemas (SQLite)
 │   └── schemas.py        # Pydantic payloads
 ├── dashboard/            # React + Vite frontend
 │   ├── src/              # React components & UI logic
-│   ├── nginx.conf        # Nginx config for static routing
-│   └── nginx.conf        # Nginx config for static routing
+│   └── Dockerfile        # Frontend build pipeline
 ├── src/                  # Core RLHF pipeline codebase
 │   ├── config.py         # Model/Training configs
 │   ├── pipelines/        # Pipeline orchestration (SFT -> DPO)
 │   └── utils/            # Shared log and system utilities
+├── Dockerfile            # Unified multi-stage Docker build config
+├── docker-compose.yml    # Single service orchestrator (port 6767)
 ├── run_dev.py            # Local development concurrent orchestrator
 └── README.md             # This document
 ```

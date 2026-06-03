@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 import multiprocessing
+try:
+    multiprocessing.set_start_method('spawn', force=True)
+except RuntimeError:
+    pass
+import time
 import os
 import re
 import signal
@@ -279,3 +284,24 @@ def start_dummy_job(db: Session = Depends(get_db)):
     process.start()
     
     return job
+
+
+# ==========================================
+# Serve Frontend Static Assets
+# ==========================================
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+class SPAStaticFiles(StaticFiles):
+    """Custom StaticFiles handler that serves index.html on 404 for SPA routing."""
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as ex:
+            if ex.status_code == 404:
+                return await super().get_response("index.html", scope)
+            raise ex
+
+dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dist"))
+if os.path.exists(dist_path):
+    app.mount("/", SPAStaticFiles(directory=dist_path, html=True), name="frontend")

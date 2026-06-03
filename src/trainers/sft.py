@@ -45,7 +45,7 @@ def train_sft(
         eval_steps=cfg.sft_eval_steps,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
-        report_to="wandb" if cfg.wandb_project else "none",
+        report_to="wandb" if (cfg.wandb_project and cfg.wandb_mode != "disabled") else "none",
         run_name=f"sft-{cfg.model_id}",
     )
 

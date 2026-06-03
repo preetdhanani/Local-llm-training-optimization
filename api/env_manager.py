@@ -8,8 +8,8 @@ def check_environment():
         "status": "ready",
         "python_version": sys.version,
         "torch_installed": False,
-        "cuda_available": torch.cuda.is_available(),
-        "device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+        "cuda_available": False,
+        "device_count": 0,
         "devices": [],
         "bitsandbytes_available": False,
         "errors": []

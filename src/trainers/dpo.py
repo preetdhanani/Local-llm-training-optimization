@@ -80,7 +80,7 @@ def train_dpo(
         "bf16": False,  # DPO with 4bit uses float16
         "gradient_checkpointing": False,
         "remove_unused_columns": False,
-        "report_to": "wandb" if cfg.wandb_project else "none",
+        "report_to": "wandb" if (cfg.wandb_project and cfg.wandb_mode != "disabled") else "none",
         "run_name": f"dpo-{cfg.model_id}",
     }
     

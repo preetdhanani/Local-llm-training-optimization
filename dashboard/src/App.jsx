@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Activity, Play, RefreshCw, Cpu, Settings, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL !== undefined ? import.meta.env.VITE_API_BASE_URL : 'http://localhost:8000';
 
 function App() {
   const [env, setEnv] = useState(null);

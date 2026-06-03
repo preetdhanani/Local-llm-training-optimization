@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  rlhf-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rlhf-app
+    ports:
+      - "6767:6767"
+    volumes:
+      - ./logs:/app/logs
+      - ./outputs:/app/outputs
+      - ./jobs.db:/app/jobs.db
+      - ./.cache:/app/.cache
+      - ./test_datasets:/app/test_datasets
+    # To enable NVIDIA GPU support inside the docker container, make sure you have the 
+    # NVIDIA Container Toolkit installed on your host, and uncomment the lines below:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
