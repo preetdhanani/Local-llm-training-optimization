@@ -10,12 +10,16 @@ venv/
 # Ignore IDE configuration files
 .vscode/
 
+.git 
+
 # Ignore OS-specific files and directories
 .DS_Store
 Thumbs.db
 *.sln
 *.userprefs
 
+
+.cache/*
 # Ignore logs and temporary files
 *.log
 *.tmp
