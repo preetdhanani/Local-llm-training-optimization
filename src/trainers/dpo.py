@@ -71,7 +71,7 @@ def train_dpo(
         "max_grad_norm": cfg.max_grad_norm,
         "warmup_ratio": cfg.dpo_warmup_ratio,
         "lr_scheduler_type": "cosine",
-        "logging_steps": 10,
+        "logging_steps": 1,
         "save_steps": cfg.dpo_save_steps,
         "evaluation_strategy": "no",
         "eval_steps": cfg.dpo_eval_steps,
@@ -97,6 +97,12 @@ def train_dpo(
         dropout=cfg.lora_dropout,
     )
 
+    # Local metrics callback
+    callbacks = []
+    if getattr(cfg, "metrics_filepath", None):
+        from src.utils.metrics import LocalMetricsCallback
+        callbacks.append(LocalMetricsCallback(cfg.metrics_filepath, phase="dpo"))
+
     # Train
     trainer = DPOTrainer(
         model=model,
@@ -107,7 +113,9 @@ def train_dpo(
         eval_dataset=eval_dataset,
         tokenizer=tokenizer,
         peft_config=lora_config,
+        callbacks=callbacks,
     )
 
     trainer.train()
     trainer.save_model(cfg.dpo_output_dir)
+

@@ -36,12 +36,46 @@ app.add_middleware(
 def get_env():
     return check_environment()
 
+@app.get("/settings/wandb", response_model=schemas.WandBSettingResponse)
+def get_wandb_setting(db: Session = Depends(get_db)):
+    setting = db.query(models.Setting).filter(models.Setting.key == "wandb_api_key").first()
+    if not setting or not setting.value:
+        return {"configured": False}
+    
+    # Mask API key for safety: hfo_********************
+    key_val = setting.value
+    masked = key_val[:4] + "*" * (len(key_val) - 4) if len(key_val) > 4 else "****"
+    return {"configured": True, "masked_key": masked}
+
+@app.post("/settings/wandb")
+def save_wandb_setting(payload: schemas.WandBSettingSchema, db: Session = Depends(get_db)):
+    key_val = payload.api_key.strip()
+    if not key_val:
+        raise HTTPException(status_code=400, detail="API Key cannot be empty")
+        
+    setting = db.query(models.Setting).filter(models.Setting.key == "wandb_api_key").first()
+    if not setting:
+        setting = models.Setting(key="wandb_api_key", value=key_val)
+        db.add(setting)
+    else:
+        setting.value = key_val
+    db.commit()
+    return {"status": "success"}
+
+@app.delete("/settings/wandb")
+def delete_wandb_setting(db: Session = Depends(get_db)):
+    setting = db.query(models.Setting).filter(models.Setting.key == "wandb_api_key").first()
+    if setting:
+        db.delete(setting)
+        db.commit()
+    return {"status": "success"}
+
 @app.get("/jobs", response_model=List[schemas.JobResponse])
 def list_jobs(db: Session = Depends(get_db)):
     return db.query(models.Job).all()
 
 @app.get("/jobs/{job_id}/logs")
-def get_job_logs(job_id: int, db: Session = Depends(get_db)):
+def get_job_logs(job_id: int, limit: int = 150, db: Session = Depends(get_db)):
     job = db.query(models.Job).filter(models.Job.id == job_id).first()
     if not job or not job.log_path:
         raise HTTPException(status_code=404, detail="Job or log path not found")
@@ -62,16 +96,46 @@ def get_job_logs(job_id: int, db: Session = Depends(get_db)):
         return {"logs": "Log file not created yet...", "paused": False}
         
     try:
-        with open(job.log_path, 'r') as f:
-            # Return last 100 lines
+        with open(job.log_path, 'r', encoding='utf-8', errors='ignore') as f:
             lines = f.readlines()
+            if limit > 0 and len(lines) > limit:
+                returned_lines = lines[-limit:]
+                has_more = True
+            else:
+                returned_lines = lines
+                has_more = False
             return {
-                "logs": "".join(lines[-100:]),
+                "logs": "".join(returned_lines),
                 "paused": paused_data is not None,
-                "paused_stats": paused_data
+                "paused_stats": paused_data,
+                "total_lines": len(lines),
+                "has_more": has_more
             }
     except Exception as e:
-        return {"logs": f"Error reading logs: {e}", "paused": False}
+        return {"logs": f"Error reading logs: {e}", "paused": False, "total_lines": 0, "has_more": False}
+
+@app.get("/jobs/{job_id}/metrics")
+def get_job_metrics(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if not job or not job.log_path:
+        return {"sft": [], "dpo": []}
+        
+    match = re.search(r"train_(.*)\.log", os.path.basename(job.log_path))
+    if not match:
+        return {"sft": [], "dpo": []}
+        
+    timestamp = match.group(1)
+    metrics_path = f"./logs/metrics_{timestamp}.json"
+    
+    if not os.path.exists(metrics_path):
+        return {"sft": [], "dpo": []}
+        
+    try:
+        import json
+        with open(metrics_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        return {"error": str(e), "sft": [], "dpo": []}
 
 @app.post("/jobs/{job_id}/approve")
 def approve_job(job_id: int, db: Session = Depends(get_db)):
@@ -223,12 +287,27 @@ def run_training_task(job_id: int, config_dict: dict):
         cfg.rejected_column = "rejected"
         cfg.system_prompt = None # Rely on prompt column contents
         
-        # We need to capture the log path.
-        # run_full_pipeline sets up its own logger, but we can pre-calculate the path
-        from src.utils.logger import get_timestamped_log_path
-        log_path = get_timestamped_log_path("full_pipeline")
+        # Generate a single unified timestamp for this training run
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        log_path = f"logs/full_pipeline_train_{timestamp}.log"
+        
         job.log_path = log_path
         db.commit()
+
+        # Attach unified paths and timestamp to config
+        cfg.pipeline_timestamp = timestamp
+        cfg.metrics_filepath = f"./logs/metrics_{timestamp}.json"
+
+        # Check if WandB API key is configured in settings table
+        wandb_setting = db.query(models.Setting).filter(models.Setting.key == "wandb_api_key").first()
+        if wandb_setting and wandb_setting.value:
+            os.environ["WANDB_API_KEY"] = wandb_setting.value
+            cfg.wandb_mode = "online"
+            cfg.report_to = "wandb"
+        else:
+            cfg.wandb_mode = "disabled"
+            cfg.report_to = "none"
 
         # Run pipeline
         run_full_pipeline(cfg)
@@ -358,5 +437,8 @@ class SPAStaticFiles(StaticFiles):
             raise ex
 
 dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dist"))
+if not os.path.exists(dist_path):
+    dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "dist"))
+
 if os.path.exists(dist_path):
     app.mount("/", SPAStaticFiles(directory=dist_path, html=True), name="frontend")

@@ -39,7 +39,7 @@ def train_sft(
         dataset_text_field="text",
         bf16=True,
         gradient_checkpointing=True,
-        logging_steps=10,
+        logging_steps=1,
         save_steps=cfg.sft_save_steps,
         evaluation_strategy="steps",
         eval_steps=cfg.sft_eval_steps,
@@ -56,6 +56,12 @@ def train_sft(
         dropout=cfg.lora_dropout,
     )
 
+    # Local metrics callback
+    callbacks = []
+    if getattr(cfg, "metrics_filepath", None):
+        from src.utils.metrics import LocalMetricsCallback
+        callbacks.append(LocalMetricsCallback(cfg.metrics_filepath, phase="sft"))
+
     # Train
     trainer = SFTTrainer(
         model=model,
@@ -64,7 +70,9 @@ def train_sft(
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         peft_config=lora_config,
+        callbacks=callbacks,
     )
 
     trainer.train()
     trainer.save_model(cfg.sft_output_dir)
+

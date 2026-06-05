@@ -53,7 +53,14 @@ def main():
     logger.info(f"  Epochs     : {cfg.epochs}")
 
     try:
-        train_dpo(cfg, model, tokenizer, train_ds, eval_ds)
+        train_dpo(
+            cfg=cfg,
+            model=model,
+            ref_model=None,
+            tokenizer=tokenizer,
+            train_dataset=train_ds,
+            eval_dataset=eval_ds,
+        )
         logger.info(f"Training complete. Model saved to {cfg.dpo_output_dir}")
     finally:
         finish_run(cfg)

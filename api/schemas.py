@@ -64,3 +64,10 @@ class TrainingConfigSchema(BaseModel):
     # WandB
     wandb_mode: str = "disabled"
     wandb_project: str = "rlhf-handson-pytorch"
+
+class WandBSettingSchema(BaseModel):
+    api_key: str
+
+class WandBSettingResponse(BaseModel):
+    configured: bool
+    masked_key: Optional[str] = None

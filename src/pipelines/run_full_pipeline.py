@@ -36,10 +36,15 @@ def run_full_pipeline(cfg: Optional[TrainConfig] = None):
     else:
         base_sft_path = "./outputs/sft_output"
 
-    # Generate single timestamp for entire pipeline run
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    # Use pre-calculated timestamp from configuration if provided, otherwise generate
+    timestamp = getattr(cfg, "pipeline_timestamp", None)
+    if not timestamp:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        cfg.pipeline_timestamp = timestamp
+
     cfg.sft_output_dir = f"{base_sft_path}_{timestamp}"
     cfg.dpo_output_dir = f"./outputs/dpo_output_{timestamp}"
+    cfg.metrics_filepath = f"./logs/metrics_{timestamp}.json"
 
     # Ensure base outputs directory exists
     try:
@@ -53,8 +58,8 @@ def run_full_pipeline(cfg: Optional[TrainConfig] = None):
     # ========================================
     # SET UP UNIFIED LOGGING FOR ENTIRE PIPELINE
     # ========================================
-    # Create single timestamped log file for the entire pipeline run
-    log_path = get_timestamped_log_path("full_pipeline")
+    # Create single timestamped log file for the entire pipeline run using aligned timestamp
+    log_path = f"logs/full_pipeline_train_{timestamp}.log"
     logger = setup_logger("full_pipeline", log_path)
     logger.info("=" * 80)
     logger.info("RLHF FULL PIPELINE START")
@@ -248,23 +253,21 @@ def run_full_pipeline(cfg: Optional[TrainConfig] = None):
         tokenizer = AutoTokenizer.from_pretrained(latest_sft_dir)
         logger.info("[OK] Tokenizer loaded from SFT checkpoint")
 
-        # Load base model WITHOUT device_map to avoid meta tensor issues with PEFT
-        logger.info(f"Loading base model: {cfg.model_id}")
-        model = AutoModelForCausalLM.from_pretrained(
-            cfg.model_id,
-            torch_dtype=torch.bfloat16,
-        )
-        logger.info("[OK] Base model loaded")
+        # Load base model using unified loader to respect quantization (use_4bit)
+        logger.info(f"Loading base model: {cfg.model_id} using unified loader...")
+        from src.models.model_loader import load_model_and_tokenizer
+        model, tokenizer = load_model_and_tokenizer(cfg)
+        logger.info("[OK] Base model loaded with correct quantization/device settings")
 
         # Load LoRA adapter from latest SFT training
         logger.info(f"Loading LoRA adapter from: {latest_sft_dir}")
         model = PeftModel.from_pretrained(model, latest_sft_dir)
         logger.info("[OK] LoRA adapter loaded - SFT model ready for DPO")
 
-        # Create reference model from SFT checkpoint for DPO KL divergence computation
-        from copy import deepcopy
-        ref_model = deepcopy(model)
-        logger.info("[OK] Reference model created (frozen copy of SFT model)")
+        # In PEFT/LoRA DPO training, setting ref_model = None instructs DPOTrainer
+        # to automatically compute reference log-probs by disabling adapters, saving ~50% VRAM!
+        ref_model = None
+        logger.info("[OK] Reference model set to None (DPOTrainer will disable adapters dynamically)")
 
         logger.info("DPO dataset already preprocessed")
         logger.info(f"[OK] DPO Train: {len(train_ds_dpo)} examples")
@@ -276,14 +279,21 @@ def run_full_pipeline(cfg: Optional[TrainConfig] = None):
         # Run DPO training
         logger.info("Starting DPO training...")
         logger.info(f"  Base model    : {latest_sft_dir}")
-        logger.info(f"  Ref model     : SFT checkpoint (frozen)")
+        logger.info(f"  Ref model     : DPOTrainer internal (adapters disabled)")
         logger.info(f"  Batch size    : {cfg.batch_size}")
         logger.info(f"  Learning rate : {cfg.learning_rate}")
         logger.info(f"  Beta (DPO)    : {cfg.beta}")
         logger.info(f"  Epochs        : {cfg.epochs}")
         logger.info(f"  Output dir    : {cfg.dpo_output_dir}")
 
-        train_dpo(cfg, model, ref_model, tokenizer, train_ds_dpo, eval_ds_dpo)
+        train_dpo(
+            cfg=cfg,
+            model=model,
+            ref_model=ref_model,
+            tokenizer=tokenizer,
+            train_dataset=train_ds_dpo,
+            eval_dataset=eval_ds_dpo,
+        )
 
         logger.info("=" * 80)
         logger.info("[OK] DPO training complete!")
