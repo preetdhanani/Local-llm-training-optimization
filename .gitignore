@@ -43,3 +43,5 @@ outputs/*
 
 *.db
 wandb/*
+
+test_datasets/x.csv

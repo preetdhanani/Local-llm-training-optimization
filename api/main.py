@@ -85,7 +85,7 @@ def get_job_logs(job_id: int, limit: int = 150, db: Session = Depends(get_db)):
     # Extract timestamp from log filename: full_pipeline_train_2026-05-18_18-00-13.log
     match = re.search(r"train_(.*)\.log", os.path.basename(job.log_path))
     paused_data = None
-    if match:
+    if match and job.status in ["RUNNING", "AWAITING_APPROVAL"]:
         timestamp = match.group(1)
         signal_path = f"./logs/signals_{timestamp}/PAUSED"
         if os.path.exists(signal_path):
@@ -178,6 +178,14 @@ def abort_job(job_id: int, db: Session = Depends(get_db)):
             signal_dir = f"./logs/signals_{timestamp}"
             os.makedirs(signal_dir, exist_ok=True)
             with open(f"{signal_dir}/ABORTED", "w") as f: f.write("1")
+            
+            # Cleanup paused signal file if it exists
+            paused_path = f"{signal_dir}/PAUSED"
+            if os.path.exists(paused_path):
+                try:
+                    os.remove(paused_path)
+                except:
+                    pass
     
     return {"status": "success"}
 

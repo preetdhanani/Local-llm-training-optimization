@@ -28,8 +28,14 @@ def train_dpo(
         train_dataset: Training dataset with "prompt", "chosen", "rejected" fields
         eval_dataset: Evaluation dataset with same fields
     """
+    import gc
     import sys
+    import torch
     
+    # Release cached GPU memory before loading dataset / setting up training
+    gc.collect()
+    torch.cuda.empty_cache()
+
     # **DIAGNOSTIC: Check for None values BEFORE training**
     sys.stderr.write("[DEBUG DPO] Checking for None/empty values in datasets...\n")
     sys.stderr.flush()
@@ -51,18 +57,23 @@ def train_dpo(
     sys.stderr.write(f"[DEBUG DPO] Train dataset OK: {len(train_dataset)} rows\n")
     sys.stderr.flush()
     
-    # Prepare model for kbit training (if quantized)
+    # Prepare model for kbit training (if quantized) - Enable gradient checkpointing for VRAM safety
     model = prepare_model_for_kbit_training(
         model,
-        use_gradient_checkpointing=False,
+        use_gradient_checkpointing=True,
     )
     model.enable_input_require_grads()
+
+    # Dynamically select precision based on GPU capabilities
+    bf16_supported = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
 
     # Build training config
     dpo_config_kwargs = {
         "output_dir": cfg.dpo_output_dir,
         "per_device_train_batch_size": cfg.batch_size,
+        "per_device_eval_batch_size": cfg.batch_size,  # Prevent default batch size of 8 from OOM-ing
         "gradient_accumulation_steps": cfg.grad_accum,
+        "eval_accumulation_steps": 1,                 # Offload evaluation predictions to CPU progressively
         "learning_rate": cfg.learning_rate,
         "num_train_epochs": cfg.epochs,
         "beta": cfg.beta,
@@ -77,8 +88,10 @@ def train_dpo(
         "eval_steps": cfg.dpo_eval_steps,
         "load_best_model_at_end": False,
         "metric_for_best_model": "eval_loss",
-        "bf16": False,  # DPO with 4bit uses float16
-        "gradient_checkpointing": False,
+        "bf16": bf16_supported,
+        "fp16": not bf16_supported,
+        "gradient_checkpointing": True,
+        "optim": "paged_adamw_32bit",
         "remove_unused_columns": False,
         "report_to": "wandb" if (cfg.wandb_project and cfg.wandb_mode != "disabled") else "none",
         "run_name": f"dpo-{cfg.model_id}",

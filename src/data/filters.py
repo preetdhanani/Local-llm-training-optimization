@@ -10,7 +10,6 @@ def validate_pair(
     rejected: str,
     min_prompt_len: int = 10,
     min_response_len: int = 3,
-    max_response_len: int = 300,
 ) -> bool:
     """
     Validate a preference pair (prompt, chosen, rejected).
@@ -21,7 +20,6 @@ def validate_pair(
         rejected: Rejected response
         min_prompt_len: Minimum prompt length
         min_response_len: Minimum response length
-        max_response_len: Maximum response length
 
     Returns:
         True if pair is valid, False otherwise
@@ -33,9 +31,6 @@ def validate_pair(
         return False
 
     if len(chosen) < min_response_len or len(rejected) < min_response_len:
-        return False
-
-    if len(chosen) > max_response_len or len(rejected) > max_response_len:
         return False
 
     return True
@@ -87,13 +82,12 @@ def filter_by_length(
     limits: dict,
 ) -> bool:
     """
-    Filter example based on character and token length constraints.
+    Filter example based on character length constraints.
 
     Args:
         example: Dataset example
-        tokenizer: Tokenizer
-        limits: Dict with keys: min_prompt_len, min_response_len, max_response_len,
-                max_prompt_tokens, max_response_tokens, max_length_diff
+        tokenizer: Tokenizer (unused)
+        limits: Dict with keys: min_prompt_len, min_response_len
 
     Returns:
         True if example passes filtering
@@ -105,25 +99,13 @@ def filter_by_length(
     c = example.get("chosen", "")
     r = example.get("rejected", "")
 
-    # Character-level validation
+    # Character-level validation (Min lengths only)
     char_valid = validate_pair(
         p, c, r,
         min_prompt_len=limits.get("min_prompt_len", 10),
         min_response_len=limits.get("min_response_len", 3),
-        max_response_len=limits.get("max_response_len", 300),
     )
-    if not char_valid:
-        return False
-
-    # Token-level validation
-    token_valid = validate_pair_by_tokens(
-        p, c, r,
-        tokenizer,
-        max_prompt_tokens=limits.get("max_prompt_tokens", 256),
-        max_response_tokens=limits.get("max_response_tokens", 512),
-        max_length_diff=limits.get("max_length_diff", 100),
-    )
-    return token_valid
+    return char_valid
 
 
 def remove_duplicates(dataset: Dataset) -> Dataset:

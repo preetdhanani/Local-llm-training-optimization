@@ -26,19 +26,33 @@ def train_sft(
         train_dataset: Training dataset with "text" field
         eval_dataset: Evaluation dataset with "text" field
     """
+    import gc
+    import torch
+    
+    # Release cached GPU memory before loading dataset / setting up training
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    # Dynamically select precision based on GPU capabilities
+    bf16_supported = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+
     # Build training config
     sft_config = SFTConfig(
         output_dir=cfg.sft_output_dir,
         per_device_train_batch_size=cfg.batch_size,
+        per_device_eval_batch_size=cfg.batch_size,  # Prevent default batch size of 8 from OOM-ing
         gradient_accumulation_steps=cfg.grad_accum,
+        eval_accumulation_steps=1,                 # Offload evaluation predictions to CPU progressively
         num_train_epochs=cfg.epochs,
         learning_rate=cfg.learning_rate,
         warmup_ratio=cfg.sft_warmup_ratio,
         max_seq_length=cfg.max_seq_length,
         packing=False,
         dataset_text_field="text",
-        bf16=True,
+        bf16=bf16_supported,
+        fp16=not bf16_supported,
         gradient_checkpointing=True,
+        optim="paged_adamw_32bit",
         logging_steps=1,
         save_steps=cfg.sft_save_steps,
         evaluation_strategy="steps",
