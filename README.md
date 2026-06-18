@@ -1,188 +1,110 @@
-# 🚀 RLHF Dashboard: Standardized On-Premise Training
+# Local-First LLM Alignment Platform
 
-[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Docker Support](https://img.shields.io/badge/docker-supported-blue.svg)](https://www.docker.com/)
-[![React Version](https://img.shields.io/badge/react-19.0-cyan.svg)](https://react.dev/)
-
-A professional, privacy-first RLHF (Reinforcement Learning from Human Feedback) training pipeline equipped with a modern React + Vite dashboard and FastAPI backend. Specifically engineered for **"Local-First"** environments, this framework ensures GDPR and enterprise privacy compliance by keeping training data and model weights entirely on your own infrastructure.
+A privacy-preserving infrastructure for Supervised Fine-Tuning (SFT) and Direct Preference Optimization (DPO) executed entirely on customer-managed environments. Optimized for resource-constrained hardware, this platform enables developers to align models locally while maintaining complete control over datasets, logs, and checkpoints.
 
 ---
 
-## 🏗️ System Architecture
+## Technical Capabilities
 
-This repository operates on a split frontend-backend architecture designed for robustness and process isolation:
-1. **React Dashboard (Frontend)**: Real-time UI for configuring training parameters, submitting jobs, and live streaming execution logs.
-2. **FastAPI Server (Backend)**: Orchestrates model configurations, maintains the job run database (SQLite), and schedules training.
-3. **Training Engine (Isolated Process)**: Initiates isolated PyTorch processes running SFT (Supervised Fine-Tuning) and DPO (Direct Preference Optimization) pipelines, freeing 100% of VRAM upon completion or termination.
+* **Direct Preference Optimization (DPO)**: Optimizes policy weights directly from preference pairs, bypassing the overhead of reward model training and Reinforcement Learning with PPO.
+* **Hardware Optimization**: Employs NF4 (4-bit) QLoRA, activation checkpointing, paged optimizers (`paged_adamw_32bit`), and evaluation memory constraints to enable parameter-efficient alignment on consumer-grade GPUs.
+* **Privacy-Centric Workloads**: Execution loops run fully within customer-managed environments, facilitating compliance with GDPR, audit logs, and internal enterprise data access policies.
+* **Automated Data Quality Thresholds**: Preprocessing filters pause execution for manual review when the system drops a high percentage of training rows (default: >40%), preventing resource waste.
+* **Reproducible Alignment Runs**: Integrates seed management across the PyTorch runtime, NumPy, and Hugging Face dataset loaders to ensure deterministic runs.
 
 ---
 
-## 🐳 Run with Docker
+## System Architecture
 
-We provide a unified Docker container holding both the React dashboard and the FastAPI training engine. You can run the official pre-built image instantly, or build it locally from source.
+The platform uses a split-process boundary architecture to isolate execution. Spawning the training engine in an isolated PyTorch subprocess ensures that 100% of CUDA VRAM is released back to the operating system immediately upon training completion, failure, or cancellation.
 
-### 1. Instant Run (Recommended)
-You can launch the entire platform with a single command without downloading any source code:
-```bash
-docker run -d --name rlhf-app `
-  -p 6767:6767 `
-  -v ./logs:/app/logs `
-  -v ./outputs:/app/outputs `
-  -v ./jobs.db:/app/jobs.db `
-  -v ./.cache:/app/.cache `
-  -v ./test_datasets:/app/test_datasets `
-  pd84697/rlhf-handson-pytorch-rlhf-app:latest
-```
-*(Note: Use backticks `` ` `` for line continuation in Windows PowerShell, or backslashes `\` in Linux/macOS).*
+```mermaid
+graph TD
+    subgraph Frontend [React Dashboard - Port 6767]
+        UI[User Interface] -->|1. Configure & Launch| API_Client[API Client]
+        API_Client -->|2. Poll Status / Logs| UI
+    end
 
-Once running, access the services:
-* **Dashboard UI & API**: [http://localhost:6767](http://localhost:6767)
-* **Interactive API Documentation**: [http://localhost:6767/docs](http://localhost:6767/docs)
+    subgraph Backend [FastAPI Server - Port 8000]
+        Router[API Router] -->|3. Register Job| DB[(SQLite Database)]
+        Router -->|4. Fork Process| Process_Manager[Process Manager]
+    end
 
-### 2. Docker Compose (Build from Source)
-If you have cloned the repository and want to run a local build:
-```bash
-docker compose up --build -d
+    subgraph Engine [Isolated Training Engine]
+        Process_Manager -->|5. Spawn| Training_Job[PyTorch Subprocess]
+        Training_Job -->|6. Write Logs| Log_Files[Log Files]
+        Training_Job -->|7. Write Metrics| Metrics_JSON[Metrics JSON]
+        Training_Job -->|8. Save Weights| Checkpoints[Model Checkpoints]
+    end
+
+    API_Client <-->|HTTP Request / CORS| Router
+    Log_Files -->|Read logs| Router
+    Metrics_JSON -->|Read metrics| Router
 ```
 
-### 3. Persistent Volumes
-To prevent data loss and cached weight redownloads when restarting containers, make sure these volumes are mounted:
-
-| Host Path | Container Path | Purpose |
-| :--- | :--- | :--- |
-| `./logs` | `/app/logs` | Live streaming training process logs |
-| `./outputs` | `/app/outputs` | Saved SFT and DPO model adapters/checkpoints |
-| `./jobs.db` | `/app/jobs.db` | SQLite registry database tracking job runs |
-| `./.cache` | `/app/.cache` | Persistent cache to prevent redownloading base models |
-| `./test_datasets` | `/app/test_datasets` | Ingestion folder for your custom CSV/JSONL datasets |
-
-### 4. GPU / CUDA Configuration
-By default, Docker containers are isolated from your host system's hardware. To enable NVIDIA GPU training inside Docker:
-
-* **For Docker Compose**:
-  Open `docker-compose.yml` and ensure the GPU resource reservation block is uncommented under the `rlhf-app` service:
-  ```yaml
-  deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: all
-            capabilities: [gpu]
-  ```
-* **For Docker CLI**:
-  Add the `--gpus all` flag to your run command:
-  ```bash
-  docker run --gpus all -d -p 6767:6767 -v ... pd84697/rlhf-handson-pytorch-rlhf-app:latest
-  ```
-
 ---
 
-## 🛠️ Local Development Setup
+## Local Development Setup
 
-If you prefer to run and modify the project locally without Docker:
+### Requirements
+* **OS**: Linux, macOS, or Windows (NVIDIA GPU required for CUDA acceleration).
+* **Software**: Python 3.10+, Node.js 18+.
 
-### 1. Requirements
-- NVIDIA GPU is required.
-- **Software**: Python 3.10+, Node.js 18+.
-
-### 2. Backend Setup
-Activate a virtual environment and install the requirements:
+### Installation
 ```bash
-# Create and activate environment
+# Clone the repository
+git clone https://github.com/preetdhanani/End-to-End-RLHF-Training-Framework.git
+cd End-to-End-RLHF-Training-Framework
+
+# Initialize virtual environment
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 
-# Install dependencies (includes PyTorch, HF transformers, TRL, etc.)
+# Install dependencies
 pip install -r requirements.txt
-```
 
-### 3. Frontend Setup
-```bash
+# Install frontend modules
 cd dashboard
 npm install
 cd ..
 ```
 
-### 4. Running the Complete Stack
-To launch both the FastAPI backend (port 8000) and React Vite server (port 6767) concurrently, run the orchestrator script:
+### Starting the Application
 ```bash
 python run_dev.py
 ```
-This utility automatically:
-- Checks and installs missing dashboard dependencies.
-- Runs both servers concurrently.
-- Streams stdout/stderr from both processes, using prefixes (`[Backend]` / `[Frontend]`) for clarity.
-- Cleans up and shuts down all child processes upon pressing `Ctrl+C`.
+This launches the FastAPI backend (port `8000`) and the React Vite dashboard (port `6767`) concurrently.
 
 ---
 
-## 🤖 Specifying Local Model Paths
+## Dataset Ingestion Standard
 
-You can fine-tune both models hosted on **Hugging Face** and models stored **locally** on your machine.
+Datasets must be formatted as `.csv` or `.jsonl` files containing exactly these headers:
 
-### 1. In Local Development Mode (`run_dev.py`)
-Simply enter the absolute or relative path to your local model folder (which must contain the standard config/model files like `config.json`, `model.safetensors`, etc.) in the **Model ID / Path** input field in the dashboard.
-- *Example Absolute Path (Windows)*: `C:/models/Qwen2.5-0.5B` (always use forward slashes `/` to avoid string escaping issues).
-- *Example Relative Path*: `models/Qwen2.5-0.5B`
-
----
-
-## 📂 Dataset Ingestion Standard
-
-The training pipeline enforces a strict format to prevent common dataset formatting issues. Your training dataset file must be a `.csv` or `.jsonl` file containing exactly these three columns:
-
-| Column Header | Description | Example Content |
+| Column Header | Description | Format Example |
 | :--- | :--- | :--- |
-| `prompt` | The context or query given to the model. | `"Explain RLHF simply."` |
-| `chosen` | The preferred high-quality response or conversation. | `"Human: ... \n\nAssistant: [high-quality response]"` |
-| `rejected` | The poor-quality response to avoid. | `"Human: ... \n\nAssistant: [low-quality response]"` |
+| `prompt` | The query or instruction given to the model. | `"Explain gradient descent simply."` |
+| `chosen` | The preferred aligned response or conversation. | `"Human: ... \n\nAssistant: [high-quality response]"` |
+| `rejected` | The unaligned response to avoid. | `"Human: ... \n\nAssistant: [low-quality response]"` |
 
-> [!NOTE]
-> For best multi-turn training results, make sure `Human:` and `Assistant:` conversation markers are included in your chosen and rejected strings.
+### Data Quality Filters:
+* **Duplicate Detection**: Filters out records where both the prompt and chosen response are identical.
+* **Empty Value Checking**: Drops rows containing missing, empty, or `None` values.
+* **Minimum Character Lengths**: Ensures prompts exceed `min_prompt_len` (default: 10 characters) and responses exceed `min_response_len` (default: 3 characters).
 
 ---
 
-## 🧪 Smoke Test / Verification
+## Verification Run (Smoke Test)
 
-To verify that your environment is fully configured and ready for training:
-
-1. Launch the application (either via Docker Compose or `run_dev.py`).
+1. Launch the application: `python run_dev.py`
 2. Open the dashboard at [http://localhost:6767](http://localhost:6767).
-3. Under **Local Dataset Path**, enter the path to the standard test dataset:
-   `test_datasets/standard_test_data.csv`
-4. Set **Max Training Rows** to `3` (to limit the run size for testing).
+3. Set **Local Dataset Path** to: `test_datasets/standard_test_data.csv`
+4. Set **Max Training Rows** to `3` (to limit execution size for verification).
 5. Click **Run Full RLHF Pipeline**.
-6. Observe the live logs streaming directly to the dashboard, guiding you through the SFT and DPO stages.
+6. Monitor live log outputs and metrics in the dashboard views.
 
 ---
 
-## 📁 Repository Structure
+## License
 
-```
-.
-├── api/                  # FastAPI codebase
-│   ├── database.py       # SQLAlchemy database engine
-│   ├── env_manager.py    # GPU & environment check helper
-│   ├── main.py           # API endpoints & runner isolation & static files
-│   ├── models.py         # SQLAlchemy schemas (SQLite)
-│   └── schemas.py        # Pydantic payloads
-├── dashboard/            # React + Vite frontend
-│   ├── src/              # React components & UI logic
-│   └── Dockerfile        # Frontend build pipeline
-├── src/                  # Core RLHF pipeline codebase
-│   ├── config.py         # Model/Training configs
-│   ├── pipelines/        # Pipeline orchestration (SFT -> DPO)
-│   └── utils/            # Shared log and system utilities
-├── Dockerfile            # Unified multi-stage Docker build config
-├── docker-compose.yml    # Single service orchestrator (port 6767)
-├── run_dev.py            # Local development concurrent orchestrator
-└── README.md             # This document
-```
-
----
-
-## 📄 License
-
-This project is open-source and licensed under the [MIT License](LICENSE).
+This project is licensed under the terms of the MIT License. See [LICENSE](LICENSE) for details.
