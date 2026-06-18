@@ -40,8 +40,8 @@ A privacy-preserving infrastructure for Supervised Fine-Tuning (SFT) and Direct 
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/preetdhanani/local-llm-training-optimization.git
-cd local-llm-training-optimization
+git clone https://github.com/preetdhanani/Local-llm-training-optimization.git
+cd Local-llm-training-optimization
 
 # Initialize virtual environment
 python -m venv .venv
