@@ -6,7 +6,17 @@ A privacy-preserving infrastructure for Supervised Fine-Tuning (SFT) and Direct 
 
 ## Technical Capabilities
 
-* **Direct Preference Optimization (DPO)**: Optimizes policy weights directly from preference pairs, bypassing the overhead of reward model trai
+* **Direct Preference Optimization (DPO)**: Optimizes policy weights directly from preference pairs, bypassing the overhead of reward model training and Reinforcement Learning with PPO.
+* **Supervised Fine-Tuning (SFT)**: Adapts base models to target styles or instructions before preference alignment.
+* **Hardware Optimization**: Supports NF4 (4-bit) QLoRA, activation checkpointing, and paged optimizers to enable efficient training on consumer-grade hardware.
+* **Process Isolation**: Spawns independent sub-processes to run training, guaranteeing that 100% of CUDA VRAM is reclaimed by the operating system upon completion.
+
+---
+
+## System Architecture
+
+```mermaid
+graph TD
     subgraph Frontend [React Dashboard - Port 6767]
         UI[User Interface] -->|1. Configure & Launch| API_Client[API Client]
         API_Client -->|2. Poll Status / Logs| UI
