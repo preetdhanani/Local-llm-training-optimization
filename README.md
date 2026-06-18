@@ -1,25 +1,12 @@
-# Local-First LLM Alignment Platform
+# Local LLM Training & Optimization Suite
 
-A privacy-preserving infrastructure for Supervised Fine-Tuning (SFT) and Direct Preference Optimization (DPO) executed entirely on customer-managed environments. Optimized for resource-constrained hardware, this platform enables developers to align models locally while maintaining complete control over datasets, logs, and checkpoints.
+A privacy-preserving infrastructure for Supervised Fine-Tuning (SFT) and Direct Preference Optimization (DPO) executed entirely on customer-managed environments. Optimized for resource-constrained hardware, this platform enables developers to train and optimize models locally while maintaining complete control over datasets, logs, and checkpoints.
 
 ---
 
 ## Technical Capabilities
 
-* **Direct Preference Optimization (DPO)**: Optimizes policy weights directly from preference pairs, bypassing the overhead of reward model training and Reinforcement Learning with PPO.
-* **Hardware Optimization**: Employs NF4 (4-bit) QLoRA, activation checkpointing, paged optimizers (`paged_adamw_32bit`), and evaluation memory constraints to enable parameter-efficient alignment on consumer-grade GPUs.
-* **Privacy-Centric Workloads**: Execution loops run fully within customer-managed environments, facilitating compliance with GDPR, audit logs, and internal enterprise data access policies.
-* **Automated Data Quality Thresholds**: Preprocessing filters pause execution for manual review when the system drops a high percentage of training rows (default: >40%), preventing resource waste.
-* **Reproducible Alignment Runs**: Integrates seed management across the PyTorch runtime, NumPy, and Hugging Face dataset loaders to ensure deterministic runs.
-
----
-
-## System Architecture
-
-The platform uses a split-process boundary architecture to isolate execution. Spawning the training engine in an isolated PyTorch subprocess ensures that 100% of CUDA VRAM is released back to the operating system immediately upon training completion, failure, or cancellation.
-
-```mermaid
-graph TD
+* **Direct Preference Optimization (DPO)**: Optimizes policy weights directly from preference pairs, bypassing the overhead of reward model trai
     subgraph Frontend [React Dashboard - Port 6767]
         UI[User Interface] -->|1. Configure & Launch| API_Client[API Client]
         API_Client -->|2. Poll Status / Logs| UI
@@ -53,8 +40,8 @@ graph TD
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/preetdhanani/End-to-End-RLHF-Training-Framework.git
-cd End-to-End-RLHF-Training-Framework
+git clone https://github.com/preetdhanani/local-llm-training-optimization.git
+cd local-llm-training-optimization
 
 # Initialize virtual environment
 python -m venv .venv

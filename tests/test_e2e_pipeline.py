@@ -12,6 +12,7 @@ def test_full_pipeline_invalid_columns(invalid_csv_data):
     cfg.prompt_column = "my_prompt"
     cfg.chosen_column = "my_chosen" # This column is missing in invalid_csv_data
     cfg.model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+    cfg.use_4bit = False
     cfg.wandb_mode = "disabled"
     
     with pytest.raises(ValueError) as excinfo:

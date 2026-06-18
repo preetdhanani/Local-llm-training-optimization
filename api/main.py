@@ -21,7 +21,7 @@ from src.config import TrainConfig
 # Create tables
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="RLHF Dashboard API")
+app = FastAPI(title="Local LLM Training & Optimization API")
 
 # Configure CORS
 app.add_middleware(

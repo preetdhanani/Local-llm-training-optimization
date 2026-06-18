@@ -33,8 +33,11 @@ def train_sft(
     gc.collect()
     torch.cuda.empty_cache()
 
-    # Dynamically select precision based on GPU capabilities
-    bf16_supported = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    # Dynamically select precision and optimizer based on GPU capabilities
+    device_is_cuda = torch.cuda.is_available()
+    bf16_supported = device_is_cuda and torch.cuda.is_bf16_supported()
+    fp16_supported = device_is_cuda and not bf16_supported
+    optim_algo = "paged_adamw_32bit" if device_is_cuda else "adamw_torch"
 
     # Build training config
     sft_config = SFTConfig(
@@ -50,9 +53,9 @@ def train_sft(
         packing=False,
         dataset_text_field="text",
         bf16=bf16_supported,
-        fp16=not bf16_supported,
+        fp16=fp16_supported,
         gradient_checkpointing=True,
-        optim="paged_adamw_32bit",
+        optim=optim_algo,
         logging_steps=1,
         save_steps=cfg.sft_save_steps,
         evaluation_strategy="steps",

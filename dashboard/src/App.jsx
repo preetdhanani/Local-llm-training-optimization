@@ -452,7 +452,7 @@ function App() {
       <header className="header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <TrendingUp size={28} color="#60a5fa" />
-          <h1>RLHF Dashboard Cockpit</h1>
+          <h1>Local LLM Training & Optimization Suite</h1>
         </div>
 
         {/* View Toggle Tabs */}

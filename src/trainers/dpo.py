@@ -64,8 +64,11 @@ def train_dpo(
     )
     model.enable_input_require_grads()
 
-    # Dynamically select precision based on GPU capabilities
-    bf16_supported = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    # Dynamically select precision and optimizer based on GPU capabilities
+    device_is_cuda = torch.cuda.is_available()
+    bf16_supported = device_is_cuda and torch.cuda.is_bf16_supported()
+    fp16_supported = device_is_cuda and not bf16_supported
+    optim_algo = "paged_adamw_32bit" if device_is_cuda else "adamw_torch"
 
     # Build training config
     dpo_config_kwargs = {
@@ -89,9 +92,9 @@ def train_dpo(
         "load_best_model_at_end": False,
         "metric_for_best_model": "eval_loss",
         "bf16": bf16_supported,
-        "fp16": not bf16_supported,
+        "fp16": fp16_supported,
         "gradient_checkpointing": True,
-        "optim": "paged_adamw_32bit",
+        "optim": optim_algo,
         "remove_unused_columns": False,
         "report_to": "wandb" if (cfg.wandb_project and cfg.wandb_mode != "disabled") else "none",
         "run_name": f"dpo-{cfg.model_id}",
